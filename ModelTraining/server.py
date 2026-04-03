@@ -39,15 +39,10 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 URL_MODEL_PATH   = os.path.join(BASE_DIR, "models", "url_model", "xgboost_phishing_detector.pkl")
 EMAIL_MODEL_PATH = os.path.join(BASE_DIR, "email_models", "models", "email_tfidf_xgboost.pkl")
 
-
 print("Loading URL model …")
 with open(URL_MODEL_PATH, "rb") as f:
     url_model = pickle.load(f)
 print("✅ URL model loaded")
-
-# ─── SHAP Explainer Initialization ──────────────────────────────────────────
-import shap
-explainer = shap.TreeExplainer(url_model)
 
 print("Loading Email model …")
 with open(EMAIL_MODEL_PATH, "rb") as f:
@@ -119,27 +114,7 @@ def predict_url():
 
         # Build feature vector in correct order, defaulting missing to 0
         vector = [features.get(f, 0) for f in URL_FEATURE_ORDER]
-
         X = np.array([vector], dtype=float)
-
-        # SHAP values computation
-        shap_values = explainer.shap_values(X)
-        # For binary classification, shap_values is list OR array depending on version
-        if isinstance(shap_values, list):
-            shap_vals = shap_values[1][0]  # phishing class
-        else:
-            shap_vals = shap_values[0]
-        # Map feature → shap value
-        feature_contributions = {
-            URL_FEATURE_ORDER[i]: float(shap_vals[i])
-            for i in range(len(URL_FEATURE_ORDER))
-        }
-        # Sort by absolute importance
-        sorted_contributions = sorted(
-            feature_contributions.items(),
-            key=lambda x: abs(x[1]),
-            reverse=True
-        )
 
         # XGBoost predict_proba: [[prob_legit, prob_phish]]
         proba = url_model.predict_proba(X)[0]
@@ -163,11 +138,7 @@ def predict_url():
             "confidence": round(phish_prob * 100 if is_phishing else (1 - phish_prob) * 100, 1),
             "phishingProbability": round(phish_prob * 100, 1),
             "label": "PHISHING" if is_phishing else "LEGITIMATE",
-            "features": features,
-            "shap": {
-                "values": feature_contributions,
-                "topFeatures": sorted_contributions[:5]
-            }
+            "features": features
         })
 
     except Exception as e:
