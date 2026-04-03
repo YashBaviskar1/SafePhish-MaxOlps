@@ -27,6 +27,7 @@ __pycache__/
 # Dataset
 ModelTraining/dataset/
 ModelTraining/phishing.csv
+ModelTraining/*.csv
 # Env / config
 .python-version
 
