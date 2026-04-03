@@ -196,7 +196,9 @@ function extractEmailContent(targetNode = null) {
     }
 
     if (body) {
-        const uniqueUrls = [...new Set(extractedUrls)].filter(u => !body.includes(u));
+        // Normalize URLs before deduplication to prevent same URL appearing with/without trailing slash
+        const normalizedUrls = extractedUrls.map(url => url.replace(/\/+$/, ''));
+        const uniqueUrls = [...new Set(normalizedUrls)].filter(u => !body.includes(u));
         if (uniqueUrls.length > 0) {
             body += '\n\nExtracted Links:\n' + uniqueUrls.join('\n');
         }
