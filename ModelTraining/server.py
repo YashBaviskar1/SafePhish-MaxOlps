@@ -11,6 +11,7 @@ import traceback
 import numpy as np
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+import re
 from feature_extractor import FeatureExtraction
 
 app = Flask(__name__)
@@ -130,6 +131,27 @@ def predict_url():
         return jsonify({"error": str(e)}), 500
 
 
+def clean_email_text(text):
+    """
+    Clean raw email body text to match training data preprocessing:
+    - Lowercase
+    - Strip HTML tags
+    - Remove URLs (replaced by urltoken)
+    - Remove email addresses (replaced by emailtoken)
+    - Collapse whitespace
+    - Drop very short / empty results
+    """
+    if not isinstance(text, str) or text.strip() == '':
+        return ''
+    text = text.lower()
+    text = re.sub(r'<[^>]+>', ' ', text)          # strip HTML tags
+    text = re.sub(r'http\S+|www\.\S+', ' urltoken ', text)  # replace URLs
+    text = re.sub(r'\S+@\S+', ' emailtoken ', text)          # replace emails
+    text = re.sub(r'[^a-z0-9\s]', ' ', text)     # keep only alphanumeric
+    text = re.sub(r'\s+', ' ', text).strip()      # collapse whitespace
+    return text
+
+
 @app.route("/predict/email", methods=["POST"])
 def predict_email():
     """
@@ -142,12 +164,24 @@ def predict_email():
         subject = data.get("subject", "")
         body    = data.get("body", "")
 
-        # Combine subject and body — mirrors training pre-processing
+        # Combine subject and body
         combined = f"{subject} {body}".strip()
+        
+        # CLEAN email text (CRITICAL: must match training preprocessing)
+        cleaned = clean_email_text(combined)
+
+        if not cleaned:
+            return jsonify({
+                "isPhishing": False,
+                "confidence": 0.0,
+                "phishingProbability": 0.0,
+                "label": "LEGITIMATE",
+                "note": "Empty email content after cleaning"
+            })
 
         # The pkl is a Pipeline with TfidfVectorizer + XGBoost
-        proba = email_model.predict_proba([combined])[0]
-        pred  = int(email_model.predict([combined])[0])
+        proba = email_model.predict_proba([cleaned])[0]
+        pred  = int(email_model.predict([cleaned])[0])
 
         classes = list(email_model.classes_)
         # phishing = 1, safe = 0 (typical for email dataset)

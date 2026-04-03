@@ -195,6 +195,23 @@ class EmailDetector {
             analysis.isPhishing = avgScore > 0.5;
         }
     }
+
+    /**
+     * Extract URLs from email content
+     * @param {string} emailContent - The email content to parse
+     * @returns {array} - Array of unique URLs found (max 5)
+     */
+    extractURLsFromEmail(emailContent) {
+        // Extract all URLs (http, https, ftp)
+        const urlRegex = /(https?:\/\/|ftp:\/\/)[^\s<>"{}|\\^`\[\]]+/gi;
+        const urls = emailContent.match(urlRegex) || [];
+        
+        // Remove duplicates using Set
+        const uniqueUrls = [...new Set(urls)];
+        
+        // Return only the first 5 URLs to avoid performance issues
+        return uniqueUrls.slice(0, 5);
+    }
 }
 
 // Export for use in other modules

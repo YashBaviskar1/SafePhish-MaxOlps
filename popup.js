@@ -405,6 +405,56 @@ function displayEmailResult(result) {
         ? `<div class="detail-item"><strong>Phishing Probability:</strong><p>${result.phishingProb}%</p></div>`
         : '';
 
+    // Build URL display section if URLs were scanned
+    let urlSection = '';
+    if (result.urls) {
+        const { phishingUrls, legitimateUrls, summary } = result.urls;
+        
+        // Create URL verdict list
+        let urlVerdictList = '';
+        
+        // Add phishing URLs first
+        if (phishingUrls && phishingUrls.length > 0) {
+            phishingUrls.forEach(urlData => {
+                urlVerdictList += `
+                    <div style="margin: 8px 0; padding: 8px; background: rgba(255, 69, 69, 0.1); border-left: 3px solid #ff4545; border-radius: 4px;">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                            <span style="font-size: 18px;">⚠️</span>
+                            <strong style="color: #ff6b6b; flex: 1; word-break: break-all; font-size: 12px;">${escapeHtml(urlData.url)}</strong>
+                            <span style="background: #ff4545; color: white; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold;">${urlData.confidence}%</span>
+                        </div>
+                        <div style="font-size: 11px; color: #ff6b6b;">PHISHING</div>
+                    </div>
+                `;
+            });
+        }
+        
+        // Add legitimate URLs
+        if (legitimateUrls && legitimateUrls.length > 0) {
+            legitimateUrls.forEach(urlData => {
+                urlVerdictList += `
+                    <div style="margin: 8px 0; padding: 8px; background: rgba(76, 175, 80, 0.1); border-left: 3px solid #4caf50; border-radius: 4px;">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                            <span style="font-size: 18px;">✅</span>
+                            <strong style="color: #4caf50; flex: 1; word-break: break-all; font-size: 12px;">${escapeHtml(urlData.url)}</strong>
+                            <span style="background: #4caf50; color: white; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold;">${urlData.confidence}%</span>
+                        </div>
+                        <div style="font-size: 11px; color: #4caf50;">LEGITIMATE</div>
+                    </div>
+                `;
+            });
+        }
+
+        urlSection = `
+            <div class="detail-item">
+                <strong>🔗 URLs Found in Email: ${summary}</strong>
+                <div style="margin-top: 10px;">
+                    ${urlVerdictList}
+                </div>
+            </div>
+        `;
+    }
+
     contentDiv.innerHTML = `
         <div class="result-header ${riskColor}">
             <h3>${riskLevel}${mlBadge}</h3>
@@ -416,6 +466,7 @@ function displayEmailResult(result) {
                 <strong>Status:</strong>
                 <p>${result.isPhishing ? '⚠️ Potential Phishing' : '✅ Legitimate'}</p>
             </div>
+            ${urlSection}
             <div class="detail-item">
                 <strong>Suspicious Elements Found:</strong>
                 <p>${result.suspiciousElements || 'None'}</p>
