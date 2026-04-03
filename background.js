@@ -185,6 +185,12 @@ async function performUrlScan(url) {
             ? `⚠️ ML model detected phishing patterns. Suspicious indicators: ${phishingFeatures.join(', ') || 'general URL structure'}. Do not enter credentials on this page.`
             : `✅ ML model classified this URL as legitimate (${result.phishingProbability}% phishing probability). Always verify the domain before sharing sensitive data.`;
 
+        // Prefer the server-computed Python features (full 30-feature set with real WHOIS/DNS/Google data).
+        // Fall back to the JS-extracted features only if the server didn't return any.
+        const finalFeatures = (result.features && Object.keys(result.features).length > 0)
+            ? result.features
+            : features;
+
         return {
             url,
             isPhishing: result.isPhishing,
@@ -192,7 +198,7 @@ async function performUrlScan(url) {
             analysis: analysisText,
             mlLabel: result.label,
             phishingProb: result.phishingProbability,
-            features: features
+            features: finalFeatures
         };
 
     } catch (err) {

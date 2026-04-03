@@ -9,3 +9,5 @@ python-whois
 dnspython
 googlesearch-python
 python-dateutil
+tldextract
+python-dotenv
