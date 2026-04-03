@@ -11,3 +11,7 @@ googlesearch-python
 python-dateutil
 tldextract
 python-dotenv
+spacy>=3.5.0
+textblob>=0.17.1
+nltk>=3.8.1
+transformers>=4.30.0

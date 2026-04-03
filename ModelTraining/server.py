@@ -25,6 +25,7 @@ from flask_cors import CORS
 from feature_extractor import FeatureExtraction
 from context_engine import analyze_context
 from behavior_engine import analyze_behavior
+from ai_fingerprint_detector import analyze_ai_fingerprint
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '.env'))
 
@@ -531,6 +532,9 @@ def analyze_email_full():
         # Accept optional pre-computed external scores (for 5-engine master calculation)
         incoming_url_score = data.get("url_score", 0)
         incoming_attachment_score = data.get("attachment_score", 0)
+        enable_ai_detection = data.get("enable_ai_detection", False)
+        
+        print(f"\n📢 [New Engine] Analyzing email with enable_ai_detection={enable_ai_detection}", flush=True)
 
         # --- STAGE 1: ML Content Analysis (TF-IDF + XGBoost) ---
         combined_text = f"{subject} {body}".strip()
@@ -555,13 +559,24 @@ def analyze_email_full():
         behavior_score = behavior_result["behavior_score"]
         behavior_signals = behavior_result["signals"]
 
+        # --- STAGE 3.5: AI Fingerprint Detection (NEW) ---
+        ai_score = 0
+        ai_signals = []
+        if enable_ai_detection:
+            ai_result = analyze_ai_fingerprint(body)
+            ai_score = ai_result["ai_score"]
+            ai_signals = ai_result["signals"]
+            print(f"   🤖 AI Engine Score: {ai_score}/100", flush=True)
+            if ai_signals:
+                print(f"   🤖 AI Signals: {ai_signals}", flush=True)
+
         # --- STAGE 4: The Master Risk Fusion Engine (5 Engines) ---
         # Weights: Email ML (30%), URL ML (25%), Context (15%), Behavior (20%), Attachment (10%)
         # If no attachment is provided, rebalance smoothly.
         if incoming_attachment_score > 0:
-            final_risk_score = (ml_risk_score * 0.30) + (incoming_url_score * 0.25) + (context_score * 0.15) + (behavior_score * 0.20) + (incoming_attachment_score * 0.10)
+            final_risk_score = (ml_risk_score * 0.25) + (incoming_url_score * 0.20) + (context_score * 0.15) + (behavior_score * 0.20) + (incoming_attachment_score * 0.10) + (ai_score * 0.10)
         else:
-            final_risk_score = (ml_risk_score * 0.35) + (incoming_url_score * 0.30) + (context_score * 0.15) + (behavior_score * 0.20)
+            final_risk_score = (ml_risk_score * 0.30) + (incoming_url_score * 0.25) + (context_score * 0.15) + (behavior_score * 0.20) + (ai_score * 0.10)
             
         # Cap at 100 and round it cleanly
         final_risk_score = min(round(final_risk_score), 100)
@@ -580,6 +595,7 @@ def analyze_email_full():
         # We'll just extend everything to ensure explainability is high.
         all_findings.extend([sig for sig in context_signals if "No" not in sig])
         all_findings.extend([sig for sig in behavior_signals if "No" not in sig])
+        all_findings.extend([sig for sig in ai_signals if "No" not in sig])
         
         # If no flags were raised at all
         if not all_findings:
@@ -595,7 +611,8 @@ def analyze_email_full():
                 "urlScore": incoming_url_score,
                 "contextScore": context_score,
                 "behaviorScore": behavior_score,
-                "attachmentScore": incoming_attachment_score
+                "attachmentScore": incoming_attachment_score,
+                "aiFingerprintScore": ai_score
             }
         })
 
@@ -605,6 +622,6 @@ def analyze_email_full():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
-    print("\n🚀 SafePhish ML Server running at http://localhost:5000")
-    print(f"   VT API Key: {'configured ✅' if VT_API_KEY else 'NOT SET ⚠️'}\n")
+    print("\n🚀 SafePhish ML Server [NEW ENGINE v2] running at http://localhost:5000", flush=True)
+    print(f"   VT API Key: {'configured ✅' if VT_API_KEY else 'NOT SET ⚠️'}\n", flush=True)
     app.run(host="0.0.0.0", port=5000, debug=False)
