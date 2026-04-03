@@ -1,5 +1,10 @@
 // Background Service Worker for Chrome Extension
 
+// Load the URL feature extractor (pure JS, no DOM needed)
+importScripts('url/featureExtractor.js');
+
+const ML_SERVER = 'http://localhost:5000';
+
 let contextData = null;
 
 // Email platforms list (shared logic)
@@ -48,7 +53,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
             url: info.linkUrl
         };
         // Attempt to open the popup
-        try { chrome.action.openPopup(); } catch(e) {}
+        try { chrome.action.openPopup(); } catch (e) { }
 
     } else if (info.menuItemId === "scanSelection") {
         const selectedText = info.selectionText || '';
@@ -61,14 +66,14 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
                     type: 'email',
                     content: `Subject: ${subject}\n\n${selectedText}`
                 };
-                try { chrome.action.openPopup(); } catch(e) {}
+                try { chrome.action.openPopup(); } catch (e) { }
             });
         } else {
             contextData = {
                 type: 'email',
                 content: selectedText
             };
-            try { chrome.action.openPopup(); } catch(e) {}
+            try { chrome.action.openPopup(); } catch (e) { }
         }
 
     } else if (info.menuItemId === "scanEmail") {
@@ -110,7 +115,7 @@ function _storeEmailContextAndOpen(emailData, tabUrl) {
             url: tabUrl
         };
     }
-    try { chrome.action.openPopup(); } catch(e) {}
+    try { chrome.action.openPopup(); } catch (e) { }
 }
 
 // Handle messages from popup and content scripts
@@ -143,52 +148,137 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 });
 
-// Dummy URL Scanning Function (will be replaced with ML model)
+// ── ML-Powered URL Scan ──────────────────────────────────────────────────────
 async function performUrlScan(url) {
-    // Simulate scanning delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Dummy analysis logic
-    const isDummyPhishing = url.includes('fake') || url.includes('phish') || url.includes('malware');
-    
+    // Extract the 30 URL features using our JS feature extractor
+    let features;
+    try {
+        features = URLFeatureExtractor.extract(url);
+    } catch (e) {
+        features = {};
+    }
+
+    try {
+        const response = await fetch(`${ML_SERVER}/predict/url`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ features })
+        });
+
+        if (!response.ok) throw new Error(`Server error: ${response.status}`);
+
+        const result = await response.json();
+
+        // Build a human-readable feature summary
+        const phishingFeatures = Object.entries(features)
+            .filter(([, v]) => v === -1)
+            .map(([k]) => k);
+
+        const analysisText = result.isPhishing
+            ? `⚠️ ML model detected phishing patterns. Suspicious indicators: ${phishingFeatures.join(', ') || 'general URL structure'}. Do not enter credentials on this page.`
+            : `✅ ML model classified this URL as legitimate (${result.phishingProbability}% phishing probability). Always verify the domain before sharing sensitive data.`;
+
+        return {
+            url,
+            isPhishing: result.isPhishing,
+            confidence: result.confidence,
+            analysis: analysisText,
+            mlLabel: result.label,
+            phishingProb: result.phishingProbability,
+            features: features
+        };
+
+    } catch (err) {
+        console.warn('SafePhish: ML server unreachable, using fallback analysis.', err.message);
+        return _fallbackUrlScan(url, features);
+    }
+}
+
+/** Fallback rule-based scan when the ML server is not running */
+function _fallbackUrlScan(url, features) {
+    const phishCount = Object.values(features).filter(v => v === -1).length;
+    const isPhishing = phishCount >= 4;
+    const phishingFeatures = Object.entries(features)
+        .filter(([, v]) => v === -1)
+        .map(([k]) => k);
+
     return {
-        url: url,
-        isPhishing: isDummyPhishing,
-        confidence: isDummyPhishing ? Math.floor(Math.random() * 40 + 60) : Math.floor(Math.random() * 20 + 80),
-        analysis: isDummyPhishing 
-            ? 'This URL shows characteristics of a phishing attempt. Proceed with caution.'
-            : 'This URL appears to be legitimate based on current analysis.'
+        url,
+        isPhishing,
+        confidence: Math.round(Math.min(95, 40 + phishCount * 8)),
+        analysis: isPhishing
+            ? `⚠️ Rule-based fallback (ML server offline): ${phishCount} suspicious features detected — ${phishingFeatures.join(', ')}.`
+            : `✅ Rule-based fallback (ML server offline): Only ${phishCount} suspicious feature(s) detected.`,
+        mlLabel: isPhishing ? 'PHISHING' : 'LEGITIMATE',
+        phishingProb: null,
+        features: features
     };
 }
 
-// Dummy Email Scanning Function (will be replaced with ML model)
+// ── ML-Powered Email Scan ─────────────────────────────────────────────────────
 async function performEmailScan(emailContent, type) {
-    // Simulate scanning delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    // Dummy analysis logic
-    const isDummyPhishing = emailContent.toLowerCase().includes('verify') || 
-                            emailContent.toLowerCase().includes('confirm') ||
-                            emailContent.toLowerCase().includes('urgent');
-    
-    const suspiciousPatterns = [];
-    if (emailContent.toLowerCase().includes('verify')) suspiciousPatterns.push('Request to verify account');
-    if (emailContent.toLowerCase().includes('confirm')) suspiciousPatterns.push('Confirmation request');
-    if (emailContent.toLowerCase().includes('urgent')) suspiciousPatterns.push('Urgency language');
-    if (emailContent.toLowerCase().includes('click here')) suspiciousPatterns.push('Suspicious link');
-    
+    // Parse subject and body from the combined string
+    let subject = '';
+    let body = emailContent;
+    if (emailContent.startsWith('Subject:')) {
+        const parts = emailContent.split('\n\n');
+        subject = parts[0].replace(/^Subject:\s*/i, '').trim();
+        body = parts.slice(1).join('\n\n').trim();
+    }
+
+    try {
+        const response = await fetch(`${ML_SERVER}/predict/email`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ subject, body })
+        });
+
+        if (!response.ok) throw new Error(`Server error: ${response.status}`);
+
+        const result = await response.json();
+
+        const analysisText = result.isPhishing
+            ? `⚠️ ML model detected phishing content with ${result.phishingProbability}% confidence. This email may attempt to steal credentials or personal data. Do not click any links or download attachments.`
+            : `✅ ML model classified this email as legitimate (${result.phishingProbability}% phishing probability). Exercise normal caution with any links or attachments.`;
+
+        return {
+            sender: extractSender(emailContent) || 'Unknown',
+            content: emailContent.substring(0, 120) + '…',
+            type,
+            isPhishing: result.isPhishing,
+            confidence: result.confidence,
+            suspiciousElements: result.isPhishing ? 'ML model identified phishing patterns in the email content.' : 'None detected',
+            analysis: analysisText,
+            mlLabel: result.label,
+            phishingProb: result.phishingProbability
+        };
+
+    } catch (err) {
+        console.warn('SafePhish: ML server unreachable, using fallback email analysis.', err.message);
+        return _fallbackEmailScan(emailContent, subject, body, type);
+    }
+}
+
+/** Fallback rule-based email scan when the ML server is not running */
+function _fallbackEmailScan(emailContent, subject, body, type) {
+    const text = (subject + ' ' + body).toLowerCase();
+    const phishKeywords = ['verify', 'confirm', 'urgent', 'click here', 'update account',
+        'suspended', 'password', 'credit card', 'unusual activity'];
+    const found = phishKeywords.filter(kw => text.includes(kw));
+    const isPhishing = found.length >= 2;
+
     return {
         sender: extractSender(emailContent) || 'Unknown',
-        content: emailContent.substring(0, 100) + '...',
-        type: type,
-        isPhishing: isDummyPhishing,
-        confidence: isDummyPhishing ? Math.floor(Math.random() * 40 + 60) : Math.floor(Math.random() * 20 + 80),
-        suspiciousElements: suspiciousPatterns.length > 0 
-            ? suspiciousPatterns.join(', ')
-            : 'None detected',
-        analysis: isDummyPhishing
-            ? 'This email contains patterns commonly found in phishing attempts. Be cautious.'
-            : 'This email appears to be legitimate based on current analysis.'
+        content: emailContent.substring(0, 120) + '…',
+        type,
+        isPhishing,
+        confidence: Math.min(95, 30 + found.length * 12),
+        suspiciousElements: found.length > 0 ? `Phishing keywords: ${found.join(', ')}` : 'None detected',
+        analysis: isPhishing
+            ? `⚠️ Rule-based fallback (ML server offline): ${found.length} phishing keywords found — ${found.join(', ')}.`
+            : `✅ Rule-based fallback (ML server offline): No strong phishing signals detected.`,
+        mlLabel: isPhishing ? 'PHISHING' : 'LEGITIMATE',
+        phishingProb: null
     };
 }
 

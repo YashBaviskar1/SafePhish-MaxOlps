@@ -328,9 +328,17 @@ function displayUrlResult(result) {
     const riskLevel = result.isPhishing ? 'PHISHING' : 'LEGITIMATE';
     const riskColor = result.isPhishing ? 'risk-high' : 'risk-safe';
 
+    const mlBadge = result.phishingProb !== null
+        ? `<span style="font-size:11px;background:rgba(255,255,255,0.2);padding:2px 8px;border-radius:12px;margin-left:8px;">🤖 ML Model</span>`
+        : `<span style="font-size:11px;background:rgba(255,255,255,0.15);padding:2px 8px;border-radius:12px;margin-left:8px;">📐 Rule-based</span>`;
+
+    const probLine = result.phishingProb !== null
+        ? `<div class="detail-item"><strong>Phishing Probability:</strong><p>${result.phishingProb}%</p></div>`
+        : '';
+
     contentDiv.innerHTML = `
         <div class="result-header ${riskColor}">
-            <h3>${riskLevel}</h3>
+            <h3>${riskLevel}${mlBadge}</h3>
             <p>Confidence: ${result.confidence}%</p>
         </div>
         <div class="result-details">
@@ -338,6 +346,7 @@ function displayUrlResult(result) {
                 <strong>URL:</strong>
                 <p>${escapeHtml(result.url)}</p>
             </div>
+            ${probLine}
             <div class="detail-item">
                 <strong>Status:</strong>
                 <p>${result.isPhishing ? '⚠️ Potential Phishing' : '✅ Legitimate'}</p>
@@ -346,10 +355,39 @@ function displayUrlResult(result) {
                 <strong>Analysis:</strong>
                 <p>${result.analysis || 'No additional details available'}</p>
             </div>
+            <div style="margin-top: 15px; text-align: center;">
+                <button id="viewFeaturesBtn" class="action-btn" style="width: 100%; padding: 10px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; cursor: pointer; border-radius: 8px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s ease;">
+                    📊 View Detailed Feature Analysis
+                </button>
+            </div>
         </div>
     `;
 
     resultDiv.classList.remove('hidden');
+
+    // Attach listener for the new button
+    const btn = document.getElementById('viewFeaturesBtn');
+    if (btn) {
+        btn.addEventListener('click', () => {
+            // Store results for the detail page
+            chrome.storage.local.set({ 
+                lastAnalysis: {
+                    url: result.url,
+                    isPhishing: result.isPhishing,
+                    confidence: result.confidence,
+                    features: result.features,
+                    mlLabel: result.mlLabel,
+                    phishingProb: result.phishingProb
+                } 
+            }, () => {
+                chrome.tabs.create({ url: 'features.html' });
+            });
+        });
+
+        // Add hover effect via JS since it's an inline style
+        btn.onmouseover = () => btn.style.background = 'rgba(255,255,255,0.2)';
+        btn.onmouseout = () => btn.style.background = 'rgba(255,255,255,0.1)';
+    }
 }
 
 function displayEmailResult(result) {
@@ -359,12 +397,21 @@ function displayEmailResult(result) {
     const riskLevel = result.isPhishing ? 'PHISHING' : 'LEGITIMATE';
     const riskColor = result.isPhishing ? 'risk-high' : 'risk-safe';
 
+    const mlBadge = result.phishingProb !== null
+        ? `<span style="font-size:11px;background:rgba(255,255,255,0.2);padding:2px 8px;border-radius:12px;margin-left:8px;">🤖 ML Model</span>`
+        : `<span style="font-size:11px;background:rgba(255,255,255,0.15);padding:2px 8px;border-radius:12px;margin-left:8px;">📐 Rule-based</span>`;
+
+    const probLine = result.phishingProb !== null
+        ? `<div class="detail-item"><strong>Phishing Probability:</strong><p>${result.phishingProb}%</p></div>`
+        : '';
+
     contentDiv.innerHTML = `
         <div class="result-header ${riskColor}">
-            <h3>${riskLevel}</h3>
+            <h3>${riskLevel}${mlBadge}</h3>
             <p>Confidence: ${result.confidence}%</p>
         </div>
         <div class="result-details">
+            ${probLine}
             <div class="detail-item">
                 <strong>Status:</strong>
                 <p>${result.isPhishing ? '⚠️ Potential Phishing' : '✅ Legitimate'}</p>

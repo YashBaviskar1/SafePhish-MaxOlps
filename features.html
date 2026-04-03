@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafePhish - Detailed URL Analysis</title>
+    <link rel="stylesheet" href="features.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="background-overlay"></div>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <span class="shield-icon">🛡️</span>
+                <h1>SafePhish Analysis Report</h1>
+            </div>
+            <div id="scanSummary" class="scan-summary-card">
+                <div class="summary-top">
+                    <div class="url-info">
+                        <h2>URL Profile</h2>
+                        <p id="analyzedUrl">Loading...</p>
+                    </div>
+                    <div id="riskBadge" class="risk-badge">
+                        <span id="riskLabel">CALCULATING...</span>
+                    </div>
+                </div>
+                <div class="summary-meta">
+                    <div class="meta-item">
+                        <span class="meta-label">Detection Method</span>
+                        <span id="detectionMethod" class="meta-value">-</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-label">Model Confidence</span>
+                        <span id="confidenceValue" class="meta-value">-</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <section class="analysis-legend">
+                <div class="legend-item safe">
+                    <span class="status-dot"></span>
+                    <span class="legend-text"><strong>Safe (1)</strong>: Legitimate indicator detected</span>
+                </div>
+                <div class="legend-item neutral">
+                    <span class="status-dot"></span>
+                    <span class="legend-text"><strong>Neutral (0)</strong>: Suspicious or inconclusive</span>
+                </div>
+                <div class="legend-item dangerous">
+                    <span class="status-dot"></span>
+                    <span class="legend-text"><strong>Dangerous (-1)</strong>: Phishing indicator flagged</span>
+                </div>
+            </section>
+
+            <div class="feature-grid" id="featureGrid">
+                <!-- Features will be injected here via features.js -->
+                <div class="loading-state">
+                    <p>Loading feature analysis...</p>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>&copy; 2026 SafePhish - Advanced Agentic Security. All rights reserved.</p>
+        </footer>
+    </div>
+    <script src="features.js"></script>
+</body>
+</html>
