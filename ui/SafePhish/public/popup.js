@@ -397,8 +397,18 @@ function displayUrlResult(result) {
     const btn = document.getElementById('viewFeaturesBtn');
     if (btn) {
         btn.addEventListener('click', () => {
-            // Store the full result for the React app
-            chrome.storage.local.set({ lastAnalysis: result }, () => {
+            // Store results for the detail page, including topFeatures
+            chrome.storage.local.set({ 
+                lastAnalysis: {
+                    url: result.url,
+                    isPhishing: result.isPhishing,
+                    confidence: result.confidence,
+                    features: result.features,
+                    mlLabel: result.mlLabel,
+                    phishingProb: result.phishingProb,
+                    topFeatures: result.topFeatures || []
+                }
+            }, () => {
                 // Open the React app index file, passing a URL parameter
                 chrome.tabs.create({ url: 'index.html?page=url_report' });
             });

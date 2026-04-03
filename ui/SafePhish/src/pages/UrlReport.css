@@ -1,0 +1,140 @@
+/* Explainability Section Styles for React UI */
+
+:root {
+    --primary: #5c6bc0;
+    --primary-light: #7986cb;
+    --accent: #ff4081;
+    --bg-dark: #0f172a;
+    --card-bg: rgba(30, 41, 59, 0.7);
+    --card-border: rgba(255, 255, 255, 0.1);
+    --text-main: #f8fafc;
+    --text-muted: #94a3b8;
+    --safe: #4ade80;
+    --neutral: #fbbf24;
+    --danger: #ef4444;
+    --safe-glow: rgba(74, 222, 128, 0.1);
+    --neutral-glow: rgba(251, 191, 36, 0.1);
+    --danger-glow: rgba(239, 68, 68, 0.1);
+}
+
+.explainability-section {
+    margin-top: 2rem;
+    padding: 2rem;
+    background: rgba(15, 23, 42, 0.4);
+    border-radius: 1.5rem;
+    border: 1px solid var(--card-border);
+    backdrop-filter: blur(10px);
+}
+
+.section-header {
+    margin-bottom: 2rem;
+    text-align: center;
+}
+
+.section-header h2 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1.75rem;
+    margin-bottom: 0.5rem;
+    background: linear-gradient(135deg, #fff 0%, var(--primary-light) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.section-header p {
+    color: var(--text-muted);
+    font-size: 0.9375rem;
+}
+
+.drivers-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 1.25rem;
+}
+
+.driver-card {
+    background: rgba(30, 41, 59, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 1.25rem;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.driver-card:hover {
+    background: rgba(30, 41, 59, 0.8);
+    transform: translateY(-5px);
+    box-shadow: 0 12px 20px -8px rgba(0, 0, 0, 0.5);
+}
+
+.driver-rank {
+    position: absolute;
+    top: 0.5rem;
+    right: 1.25rem;
+    font-size: 2.5rem;
+    font-weight: 900;
+    opacity: 0.05;
+    font-family: 'Space Grotesk', sans-serif;
+    pointer-events: none;
+}
+
+.driver-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    z-index: 1;
+}
+
+.driver-name {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: #f8fafc;
+}
+
+.driver-impact-badge {
+    align-self: flex-start;
+    font-size: 0.65rem;
+    font-weight: 800;
+    padding: 0.2rem 0.6rem;
+    border-radius: 2rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.driver-card.safe-contributor {
+    border-top: 3px solid var(--safe);
+}
+
+.driver-card.risky-contributor {
+    border-top: 3px solid var(--danger);
+}
+
+.driver-card.safe-contributor .driver-impact-badge {
+    background: var(--safe-glow);
+    color: var(--safe);
+}
+
+.driver-card.risky-contributor .driver-impact-badge {
+    background: var(--danger-glow);
+    color: var(--danger);
+}
+
+.driver-explanation {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+    z-index: 1;
+}
+
+.no-drivers-msg {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 3rem;
+    color: var(--text-muted);
+    font-style: italic;
+}

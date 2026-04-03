@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import './UrlReport.css';
 
 const FEATURE_DESCRIPTIONS = {
     AbnormalURL: "Detects abnormal URL patterns. Unusual character combinations or patterns may indicate phishing.",
@@ -36,12 +37,15 @@ const FEATURE_DESCRIPTIONS = {
 const UrlReport = () => {
   const [isMatrixExpanded, setIsMatrixExpanded] = useState(true);
   const [reportData, setReportData] = useState(null);
+  const [topFeatures, setTopFeatures] = useState([]);
 
   useEffect(() => {
     if (typeof chrome !== 'undefined' && chrome.storage) {
       chrome.storage.local.get('lastAnalysis', (data) => {
         if (data.lastAnalysis) {
           setReportData(data.lastAnalysis);
+          // Safely extract the SHAP top features array
+          setTopFeatures(data.lastAnalysis.topFeatures || []);
         }
       });
     } else {
@@ -49,23 +53,16 @@ const UrlReport = () => {
     }
   }, []);
 
-
   if (!reportData) {
     return <div className="p-8 text-[#aab3d8] text-center mt-20 font-bold uppercase tracking-widest">Loading Analysis Engine...</div>;
   }
 
-  // SHAP explainability data
-  const shapData = reportData.shap?.topFeatures || [];
-  const shapValues = reportData.shap?.values || {};
-
-
-  // Map features to the requested Suspicious / Neutral / Legitimate format, with SHAP impact
+  // Map features to the requested Suspicious / Neutral / Legitimate format
   const featuresList = Object.keys(reportData.features || {}).map(key => {
     const val = reportData.features[key];
     let statusLabel = 'Neutral';
     let statusStyle = 'text-[#76767f] border-[#76767f]/30 bg-[#76767f]/10';
     let icon = 'horizontal_rule';
-    const impact = shapValues[key] || 0;
 
     if (val === 1) {
         statusLabel = 'Legitimate';
@@ -83,16 +80,15 @@ const UrlReport = () => {
       val,
       statusLabel,
       statusStyle,
-      icon,
-      impact
+      icon
     };
-  }).sort((a, b) => a.val - b.val); // Sort so Suspicious (-1) shows at the top
+  }).sort((a, b) => a.val - b.val);
 
-  const strokeOffset = 552.92 - (552.92 * reportData.confidence) / 100;
+  const strokeOffset = 402.12 - (402.12 * reportData.confidence) / 100;
 
   return (
-    <div className="p-8 space-y-8 w-full">
-      {/* Centerpiece: URL Verdict */}
+    <div className="p-8 space-y-10 w-full">
+      {/* 1. Centerpiece: URL Verdict */}
       <section className="relative overflow-hidden rounded-xl bg-[#76767f]/5 border border-[#76767f]/20 p-1">
         <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
           <span className="material-symbols-outlined text-[240px]" style={{ fontVariationSettings: "'FILL' 1" }}>warning</span>
@@ -102,7 +98,7 @@ const UrlReport = () => {
           <div className="relative flex-shrink-0">
             <svg className="w-36 h-36 transform -rotate-90">
               <circle cx="72" cy="72" r="64" fill="transparent" stroke="#76767f" strokeWidth="8" className="opacity-20"></circle>
-              <circle cx="72" cy="72" r="64" fill="transparent" stroke={reportData.isPhishing ? "#892401" : "#4caf50"} strokeWidth="8" strokeDasharray="402.12" strokeDashoffset={402.12 - (402.12 * reportData.confidence) / 100}></circle>
+              <circle cx="72" cy="72" r="64" fill="transparent" stroke={reportData.isPhishing ? "#892401" : "#4caf50"} strokeWidth="8" strokeDasharray="402.12" strokeDashoffset={strokeOffset}></circle>
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <span className="text-4xl font-black text-white" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{reportData.confidence}%</span>
@@ -119,7 +115,6 @@ const UrlReport = () => {
             </div>
             
             <div className="space-y-1">
-              {/* Shrunk the URL size and added truncate for extremely long URLs */}
               <h2 className="text-xl font-bold text-[#aab3d8] truncate" title={reportData.url} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
                 {reportData.url}
               </h2>
@@ -131,42 +126,51 @@ const UrlReport = () => {
         </div>
       </section>
 
-      {/* SHAP Top Features Section */}
-      <section className="space-y-4">
-        <h3 className="text-lg font-bold text-white flex items-center gap-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-          <span className="text-[#aab3d8]">#</span> Top Influencing Features
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {shapData.length === 0 && (
-            <div className="text-[#76767f] text-sm">No SHAP explainability available for this prediction.</div>
-          )}
-          {shapData.map(([name, value], idx) => (
-            <div key={idx} className="flex items-center gap-3 bg-[#76767f]/10 rounded-lg px-4 py-2 border border-[#76767f]/20">
-              <div className="flex-1 min-w-0">
-                <span className="font-mono text-[#aab3d8] text-xs">{name}</span>
-                <span className="ml-2 text-[#76767f] text-xs">{value >= 0 ? '+' : ''}{value.toFixed(3)}</span>
-              </div>
-              <div className="w-32 h-3 bg-[#060819] rounded overflow-hidden border border-[#76767f]/20">
-                <div style={{
-                  width: `${Math.min(Math.abs(value), 1) * 100}%`,
-                  height: '100%',
-                  background: value > 0 ? '#892401' : '#4caf50',
-                  transition: 'width 0.3s',
-                }} />
-              </div>
+      {/* 2. Neural Explainability Drivers (SHAP Integration) */}
+    {topFeatures && topFeatures.length > 0 && (
+  <section className="explainability-section">
+    <div className="section-header">
+      <h2>🧠 Neural Explainability Drivers</h2>
+      <p>These are the top 4 factors that most influenced our AI's decision for this URL.</p>
+    </div>
+    <div className="drivers-container">
+      {topFeatures.map((driver, idx) => {
+        const name = driver.feature;
+        const score = driver.score;
+        const val = reportData.features?.[name] ?? 0;
+        const isRisky = score < 0;
+        const statusClass = isRisky ? "risky-contributor" : "safe-contributor";
+        const impactText = isRisky ? "🚨 High Risk Impact" : "🛡️ Safe Indicator";
+        let explanation = FEATURE_DESCRIPTIONS[name] || "Analyzing this feature's impact on the overall security verdict.";
+        explanation = isRisky
+          ? `This feature showed a strong correlation with phishing patterns. ${explanation}`
+          : `This feature showed characteristics common in legitimate websites. ${explanation}`;
+        return (
+          <div className={`driver-card ${statusClass}`} key={name}>
+            <div className="driver-rank">#{idx + 1}</div>
+            <div className="driver-info">
+              <span className="driver-name">{name}</span>
+              <span className="driver-impact-badge">{impactText}</span>
             </div>
-          ))}
-        </div>
-      </section>
+            <div className="driver-explanation">{explanation}</div>
+            <div style={{ marginTop: "auto", fontSize: "0.7rem", color: "var(--text-muted)", opacity: 0.6, fontWeight: 600 }}>
+              Impact Magnitude: {Math.abs(score).toFixed(4)}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  </section>
+)}
 
-      {/* Explainability Section */}
+      {/* 3. Feature Explainability Matrix */}
       <section className="space-y-4">
         <div className="flex justify-between items-center">
           <h3 className="text-xl font-bold flex items-center gap-2 text-white" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-            <span className="text-[#aab3d8]">#</span> Feature Explainability Matrix
+            <span className="material-symbols-outlined text-[#aab3d8]">data_table</span> 
+            Full Feature Matrix
           </h3>
           
-          {/* Updated Legend */}
           <div className="flex gap-4 bg-[#060819] px-4 py-2 rounded-lg border border-[#76767f]/20">
             <span className="flex items-center gap-1.5 text-[11px] text-[#76767f] font-bold uppercase tracking-wider">
               <span className="material-symbols-outlined text-[#892401] text-sm">warning</span> Suspicious (-1)
@@ -187,7 +191,7 @@ const UrlReport = () => {
           >
             <div className="flex items-center gap-3">
               <span className="material-symbols-outlined text-[#aab3d8]">list_alt</span>
-              <span className="font-bold text-sm" style={{ fontFamily: 'Plus Jakarta Sans, sans-serif' }}>View Extracted Features</span>
+              <span className="font-bold text-sm" style={{ fontFamily: 'Plus Jakarta Sans, sans-serif' }}>View All {featuresList.length} Extracted Features</span>
             </div>
             <span className={`material-symbols-outlined transition-transform duration-300 ${isMatrixExpanded ? 'rotate-180' : ''}`}>expand_more</span>
           </div>
@@ -205,19 +209,7 @@ const UrlReport = () => {
                 <tbody className="divide-y divide-[#76767f]/10 text-sm" style={{ fontFamily: 'Plus Jakarta Sans, sans-serif' }}>
                   {featuresList.map((f, idx) => (
                     <tr key={idx} className="hover:bg-[#76767f]/5 transition-colors">
-                      <td className="p-4 font-mono text-[#aab3d8] text-xs whitespace-nowrap">
-                        {f.name}
-                        {/* SHAP impact bar for each feature */}
-                        <div className="mt-1 w-24 h-2 bg-[#060819] rounded overflow-hidden border border-[#76767f]/20">
-                          <div style={{
-                            width: `${Math.min(Math.abs(f.impact), 1) * 100}%`,
-                            height: '100%',
-                            background: f.impact > 0 ? '#892401' : '#4caf50',
-                            transition: 'width 0.3s',
-                          }} />
-                        </div>
-                      </td>
-                      {/* Removed whitespace-nowrap and added break-words to ensure descriptions are fully visible */}
+                      <td className="p-4 font-mono text-[#aab3d8] text-xs whitespace-nowrap">{f.name}</td>
                       <td className="p-4 text-[#76767f] text-xs break-words leading-relaxed">{f.desc}</td>
                       <td className="p-4 text-center">
                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border ${f.statusStyle} text-[10px] uppercase tracking-widest font-bold`}>

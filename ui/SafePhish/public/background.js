@@ -193,13 +193,14 @@ async function performUrlScan(url) {
             : features;
 
         return {
-            url,
+url,
             isPhishing: result.isPhishing,
             confidence: result.confidence,
             analysis: analysisText,
             mlLabel: result.label,
             phishingProb: result.phishingProbability,
-            features: finalFeatures
+            features: finalFeatures,
+            topFeatures: result.topFeatures 
         };
 
     } catch (err) {
