@@ -49,16 +49,23 @@ const UrlReport = () => {
     }
   }, []);
 
+
   if (!reportData) {
     return <div className="p-8 text-[#aab3d8] text-center mt-20 font-bold uppercase tracking-widest">Loading Analysis Engine...</div>;
   }
 
-  // Map features to the requested Suspicious / Neutral / Legitimate format
+  // SHAP explainability data
+  const shapData = reportData.shap?.topFeatures || [];
+  const shapValues = reportData.shap?.values || {};
+
+
+  // Map features to the requested Suspicious / Neutral / Legitimate format, with SHAP impact
   const featuresList = Object.keys(reportData.features || {}).map(key => {
     const val = reportData.features[key];
     let statusLabel = 'Neutral';
     let statusStyle = 'text-[#76767f] border-[#76767f]/30 bg-[#76767f]/10';
     let icon = 'horizontal_rule';
+    const impact = shapValues[key] || 0;
 
     if (val === 1) {
         statusLabel = 'Legitimate';
@@ -76,7 +83,8 @@ const UrlReport = () => {
       val,
       statusLabel,
       statusStyle,
-      icon
+      icon,
+      impact
     };
   }).sort((a, b) => a.val - b.val); // Sort so Suspicious (-1) shows at the top
 
@@ -120,6 +128,34 @@ const UrlReport = () => {
               </p>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* SHAP Top Features Section */}
+      <section className="space-y-4">
+        <h3 className="text-lg font-bold text-white flex items-center gap-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+          <span className="text-[#aab3d8]">#</span> Top Influencing Features
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {shapData.length === 0 && (
+            <div className="text-[#76767f] text-sm">No SHAP explainability available for this prediction.</div>
+          )}
+          {shapData.map(([name, value], idx) => (
+            <div key={idx} className="flex items-center gap-3 bg-[#76767f]/10 rounded-lg px-4 py-2 border border-[#76767f]/20">
+              <div className="flex-1 min-w-0">
+                <span className="font-mono text-[#aab3d8] text-xs">{name}</span>
+                <span className="ml-2 text-[#76767f] text-xs">{value >= 0 ? '+' : ''}{value.toFixed(3)}</span>
+              </div>
+              <div className="w-32 h-3 bg-[#060819] rounded overflow-hidden border border-[#76767f]/20">
+                <div style={{
+                  width: `${Math.min(Math.abs(value), 1) * 100}%`,
+                  height: '100%',
+                  background: value > 0 ? '#892401' : '#4caf50',
+                  transition: 'width 0.3s',
+                }} />
+              </div>
+            </div>
+          ))}
         </div>
       </section>
 
@@ -169,7 +205,18 @@ const UrlReport = () => {
                 <tbody className="divide-y divide-[#76767f]/10 text-sm" style={{ fontFamily: 'Plus Jakarta Sans, sans-serif' }}>
                   {featuresList.map((f, idx) => (
                     <tr key={idx} className="hover:bg-[#76767f]/5 transition-colors">
-                      <td className="p-4 font-mono text-[#aab3d8] text-xs whitespace-nowrap">{f.name}</td>
+                      <td className="p-4 font-mono text-[#aab3d8] text-xs whitespace-nowrap">
+                        {f.name}
+                        {/* SHAP impact bar for each feature */}
+                        <div className="mt-1 w-24 h-2 bg-[#060819] rounded overflow-hidden border border-[#76767f]/20">
+                          <div style={{
+                            width: `${Math.min(Math.abs(f.impact), 1) * 100}%`,
+                            height: '100%',
+                            background: f.impact > 0 ? '#892401' : '#4caf50',
+                            transition: 'width 0.3s',
+                          }} />
+                        </div>
+                      </td>
                       {/* Removed whitespace-nowrap and added break-words to ensure descriptions are fully visible */}
                       <td className="p-4 text-[#76767f] text-xs break-words leading-relaxed">{f.desc}</td>
                       <td className="p-4 text-center">
