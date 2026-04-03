@@ -162,15 +162,18 @@ async function performUrlScan(url) {
         const response = await fetch(`${ML_SERVER}/predict/url`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ features })
+            body: JSON.stringify({ url: url, features: features })
         });
 
         if (!response.ok) throw new Error(`Server error: ${response.status}`);
 
         const result = await response.json();
 
+        // Use the overridden features returned from the ML server if available
+        const finalFeatures = result.features || features;
+
         // Build a human-readable feature summary
-        const phishingFeatures = Object.entries(features)
+        const phishingFeatures = Object.entries(finalFeatures)
             .filter(([, v]) => v === -1)
             .map(([k]) => k);
 
@@ -185,7 +188,7 @@ async function performUrlScan(url) {
             analysis: analysisText,
             mlLabel: result.label,
             phishingProb: result.phishingProbability,
-            features: features
+            features: finalFeatures
         };
 
     } catch (err) {

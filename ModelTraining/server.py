@@ -11,6 +11,7 @@ import traceback
 import numpy as np
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from feature_extractor import FeatureExtraction
 
 app = Flask(__name__)
 CORS(app)  # Allow requests from Chrome extension
@@ -83,6 +84,17 @@ def predict_url():
     try:
         data = request.get_json(force=True)
         features = data.get("features", {})
+        url = data.get("url", "")
+        
+        if url:
+            # Use the exact old extraction logic to perfectly match dataset inputs
+            extractor = FeatureExtraction(url)
+            feature_list = extractor.getFeaturesList()
+            
+            # Map the exact listed output back to the dictionary
+            for idx, feature_name in enumerate(URL_FEATURE_ORDER):
+                if idx < len(feature_list):
+                    features[feature_name] = feature_list[idx]
 
         # Build feature vector in correct order, defaulting missing to 0
         vector = [features.get(f, 0) for f in URL_FEATURE_ORDER]
@@ -109,7 +121,8 @@ def predict_url():
             "isPhishing": is_phishing,
             "confidence": round(phish_prob * 100 if is_phishing else (1 - phish_prob) * 100, 1),
             "phishingProbability": round(phish_prob * 100, 1),
-            "label": "PHISHING" if is_phishing else "LEGITIMATE"
+            "label": "PHISHING" if is_phishing else "LEGITIMATE",
+            "features": features
         })
 
     except Exception as e:
