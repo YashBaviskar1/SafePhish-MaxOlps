@@ -235,8 +235,12 @@ async function _analyzeEmailUrls(emailContent) {
     const urlRegex = /(https?:\/\/|ftp:\/\/)[^\s<>"{}|\\^`\[\]]+/gi;
     const urls = emailContent.match(urlRegex) || [];
 
+    // Normalize URLs (remove trailing slashes) before deduplication
+    // This prevents the same URL appearing twice with/without trailing slash
+    const normalizedUrls = urls.map(url => url.replace(/\/+$/, ''));
+    
     // Remove duplicates and limit to 5
-    const uniqueUrls = [...new Set(urls)];
+    const uniqueUrls = [...new Set(normalizedUrls)];
     const urlsToScan = uniqueUrls.slice(0, 5);
 
     if (urlsToScan.length === 0) {
