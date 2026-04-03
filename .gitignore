@@ -38,6 +38,7 @@ uv.lock
 .DS_Store
 Thumbs.db
 
-
+.env
 #For testing the hidden phishing links in web page
 test.html
+ModelTraining/venv/
