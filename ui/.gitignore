@@ -1,0 +1,56 @@
+# Node modules
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Cache
+.cache/
+.parcel-cache/
+.vite/
+
+# Tailwind (optional if using JIT/build cache)
+.tailwindcache
+
+# Coverage
+coverage/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor folders
+.vscode/
+.idea/
+
+# Misc
+*.swp
+*.swo
+
+# TypeScript
+*.tsbuildinfo
+
+# Lock files (OPTIONAL — usually keep these)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml

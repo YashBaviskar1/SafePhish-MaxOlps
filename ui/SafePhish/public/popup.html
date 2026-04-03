@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeLink - Phishing Detector</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- URL Scanner Tab -->
+        <div id="url-tab" class="tab-content active">
+            <div class="header">
+                <h1>SafeLink</h1>
+                <!-- 🕵️ Scan Page button — top-right corner of the popup -->
+                <button id="scanDeceptiveBtn" class="btn-deceptive" title="Scan this page for hidden/deceptive clickable elements">
+                    🕵️ Scan Page
+                </button>
+            </div>
+            
+            <div class="input-section">
+                <input type="text" id="urlInput" placeholder="Paste URL here..." class="input-field">
+                <button id="scanUrlBtn" class="btn btn-primary">Check URL</button>
+            </div>
+
+            <div id="urlLoading" class="loading hidden">
+                <p>Checking...</p>
+            </div>
+
+            <div id="urlResult" class="result-section hidden">
+                <div id="urlResultContent"></div>
+            </div>
+
+            <!-- Deceptive UI scan result banner -->
+            <div id="deceptiveResult" class="result-section hidden">
+                <div id="deceptiveResultContent"></div>
+            </div>
+
+            <div class="footer-link">
+                <a href="#" id="toggleEmail">📧 Email Scanner</a>
+            </div>
+        </div>
+
+        <!-- Email Scanner Tab -->
+        <div id="email-tab" class="tab-content hidden">
+            <div class="header">
+                <h1>SafeLink</h1>
+                <!-- 🕵️ Scan Page button on email tab too -->
+                <button id="scanDeceptiveBtnEmail" class="btn-deceptive" title="Scan this page for hidden/deceptive clickable elements">
+                    🕵️ Scan Page
+                </button>
+                <p class="subtitle">Email Scanner</p>
+            </div>
+
+            <div class="input-section">
+                <input type="text" id="emailSender" placeholder="Sender Email (e.g. alerts@company.com)..." class="input-field">
+                <input type="text" id="emailSubject" placeholder="Email Subject..." class="input-field">
+                <textarea id="emailBody" placeholder="Email Body..." class="input-field textarea-field"></textarea>
+                <button id="scanEmailBtn" class="btn btn-primary">Scan Email</button>
+            </div>
+
+            <div id="emailLoading" class="loading hidden">
+                <p>Analyzing...</p>
+            </div>
+
+            <div id="emailResult" class="result-section hidden">
+                <div id="emailResultContent"></div>
+            </div>
+
+            <!-- Attachment Analysis Section -->
+            <div class="attachment-section">
+                <div class="attachment-header">
+                    <h3>📎 Attachment Analysis</h3>
+                    <div class="vt-toggle-wrap">
+                        <label class="toggle-switch" title="Toggle VirusTotal integration (disable to save API calls)">
+                            <input type="checkbox" id="vtToggle" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="toggle-label" id="vtToggleLabel">Sandbox + VT</span>
+                    </div>
+                </div>
+                <div id="attachmentInfo" class="hidden">
+                    <p class="attachment-detected">📋 Detected attachments:</p>
+                    <div id="attachmentList"></div>
+                </div>
+                <button id="autoFetchBtn" class="btn btn-secondary btn-auto-fetch hidden">
+                    ⬇️ Auto-Fetch Attachment from Email
+                </button>
+                <div id="fetchStatus" class="hidden"></div>
+                <div id="attachmentDropZone" class="drop-zone">
+                    <div class="drop-zone-content">
+                        <span class="drop-icon">📁</span>
+                        <p>Drag & drop a file here</p>
+                        <p class="drop-hint">or click to browse</p>
+                    </div>
+                    <input type="file" id="attachmentFileInput" class="file-input-hidden">
+                </div>
+                <div id="selectedFileInfo" class="hidden">
+                    <span id="selectedFileName"></span>
+                    <button id="clearFileBtn" class="btn-clear">✕</button>
+                </div>
+                <button id="scanAttachmentBtn" class="btn btn-primary btn-attachment" disabled>🔬 Scan Attachment</button>
+                <div id="attachmentLoading" class="loading hidden">
+                    <p>🔬 Running layered analysis…</p>
+                    <p class="loading-detail" id="loadingLayerText">Docker Sandbox → VirusTotal Hash → Detonation</p>
+                </div>
+                <div id="attachmentResult" class="result-section hidden">
+                    <div id="attachmentResultContent"></div>
+                </div>
+            </div>
+
+            <div class="footer-link">
+                <a href="#" id="toggleUrl">🔗 URL Scanner</a>
+            </div>
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>

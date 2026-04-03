@@ -59,12 +59,13 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
         const selectedText = info.selectionText || '';
         // If on email platform, treat selected text as email body
         if (isEmailPlatformUrl(tab.url)) {
-            // Also try to get the subject from the page
-            chrome.tabs.sendMessage(tab.id, { action: 'extractEmailSubjectOnly' }, (subjectResponse) => {
-                const subject = (subjectResponse && subjectResponse.subject) ? subjectResponse.subject : 'Unknown Subject';
+            // Also try to get the subject and sender from the page
+            chrome.tabs.sendMessage(tab.id, { action: 'extractEmailSubjectOnly' }, (metaResponse) => {
+                const subject = (metaResponse && metaResponse.subject) ? metaResponse.subject : 'Unknown Subject';
+                const sender = (metaResponse && metaResponse.sender) ? metaResponse.sender : '';
                 contextData = {
                     type: 'email',
-                    content: `Subject: ${subject}\n\n${selectedText}`
+                    content: `From: ${sender}\nSubject: ${subject}\n\n${selectedText}`
                 };
                 try { chrome.action.openPopup(); } catch (e) { }
             });
@@ -106,7 +107,7 @@ function _storeEmailContextAndOpen(emailData, tabUrl) {
     if (emailData && (emailData.subject || emailData.body)) {
         contextData = {
             type: 'email',
-            content: `Subject: ${emailData.subject || 'Unknown Subject'}\n\n${emailData.body || ''}`
+            content: `From: ${emailData.sender || ''}\nSubject: ${emailData.subject || 'Unknown Subject'}\n\n${emailData.body || ''}`
         };
     } else {
         // Store a signal so popup knows to try extraction itself
@@ -124,7 +125,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         // Store data from double-click extraction
         contextData = {
             type: 'email',
-            content: `Subject: ${request.data.subject}\n\n${request.data.body}`
+            content: `From: ${request.data.sender || ''}\nSubject: ${request.data.subject}\n\n${request.data.body}`
         };
         sendResponse({ success: true });
     } else if (request.action === 'getContextData') {
@@ -139,7 +140,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         });
         return true; // Indicates async response
     } else if (request.action === 'scanEmail') {
-        performEmailScan(request.content, request.type).then(result => {
+        performEmailScan(request.content, request.type, request.attachmentScore || 0, request.sender || "", request.enableAIDetection || false).then(result => {
+            sendResponse(result);
+        }).catch(error => {
+            sendResponse({ error: error.message });
+        });
+        return true; // Indicates async response
+    } else if (request.action === 'scanAttachment') {
+        performAttachmentScan(request.fileData, request.fileName, request.skipVT).then(result => {
             sendResponse(result);
         }).catch(error => {
             sendResponse({ error: error.message });
@@ -162,24 +170,27 @@ async function performUrlScan(url) {
         const response = await fetch(`${ML_SERVER}/predict/url`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: url, features: features })
+            body: JSON.stringify({ features, url })
         });
 
         if (!response.ok) throw new Error(`Server error: ${response.status}`);
 
         const result = await response.json();
 
-        // Use the overridden features returned from the ML server if available
-        const finalFeatures = result.features || features;
-
         // Build a human-readable feature summary
-        const phishingFeatures = Object.entries(finalFeatures)
+        const phishingFeatures = Object.entries(features)
             .filter(([, v]) => v === -1)
             .map(([k]) => k);
 
         const analysisText = result.isPhishing
             ? `⚠️ ML model detected phishing patterns. Suspicious indicators: ${phishingFeatures.join(', ') || 'general URL structure'}. Do not enter credentials on this page.`
             : `✅ ML model classified this URL as legitimate (${result.phishingProbability}% phishing probability). Always verify the domain before sharing sensitive data.`;
+
+        // Prefer the server-computed Python features (full 30-feature set with real WHOIS/DNS/Google data).
+        // Fall back to the JS-extracted features only if the server didn't return any.
+        const finalFeatures = (result.features && Object.keys(result.features).length > 0)
+            ? result.features
+            : features;
 
         return {
             url,
@@ -223,11 +234,15 @@ async function _analyzeEmailUrls(emailContent) {
     // Extract URLs from email using simple regex
     const urlRegex = /(https?:\/\/|ftp:\/\/)[^\s<>"{}|\\^`\[\]]+/gi;
     const urls = emailContent.match(urlRegex) || [];
+
+    // Normalize URLs (remove trailing slashes) before deduplication
+    // This prevents the same URL appearing twice with/without trailing slash
+    const normalizedUrls = urls.map(url => url.replace(/\/+$/, ''));
     
     // Remove duplicates and limit to 5
-    const uniqueUrls = [...new Set(urls)];
+    const uniqueUrls = [...new Set(normalizedUrls)];
     const urlsToScan = uniqueUrls.slice(0, 5);
-    
+
     if (urlsToScan.length === 0) {
         return null; // No URLs found
     }
@@ -275,7 +290,7 @@ async function _analyzeEmailUrls(emailContent) {
 }
 
 // ── ML-Powered Email Scan ─────────────────────────────────────────────────────
-async function performEmailScan(emailContent, type) {
+async function performEmailScan(emailContent, type, attachmentScore = 0, providedSender = "", enableAIDetection = false) {
     // Parse subject and body from the combined string
     let subject = '';
     let body = emailContent;
@@ -285,99 +300,73 @@ async function performEmailScan(emailContent, type) {
         body = parts.slice(1).join('\n\n').trim();
     }
 
-    // First, get email content analysis
+    const sender = providedSender || extractSender(emailContent) || "";
+
+    // 1. Get ML-based analysis for individual URLs to pass into our Master Score
+    const urlAnalysis = await _analyzeEmailUrls(emailContent);
+    let urlsToPass = [];
+    let maxUrlScore = 0;
+
+    if (urlAnalysis) {
+        const allScanned = [...urlAnalysis.phishingUrls, ...urlAnalysis.legitimateUrls];
+        urlsToPass = allScanned.map(u => u.url);
+
+        if (allScanned.length > 0) {
+            maxUrlScore = Math.max(...allScanned.map(u => u.confidence));
+        }
+    }
+
+    // 2. Fetch the Full Unified Analysis from Server
     let emailAnalysis;
     try {
-        const response = await fetch(`${ML_SERVER}/predict/email`, {
+        const response = await fetch(`${ML_SERVER}/analyze/email_full`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ subject, body })
+            body: JSON.stringify({
+                sender_email: sender,
+                subject: subject,
+                body: body,
+                urls: urlsToPass,
+                url_score: maxUrlScore,
+                attachment_score: attachmentScore,
+                enable_ai_detection: enableAIDetection
+            })
         });
 
         if (!response.ok) throw new Error(`Server error: ${response.status}`);
 
         emailAnalysis = await response.json();
+
     } catch (err) {
-        console.warn('SafePhish: ML server unreachable, using fallback email analysis.', err.message);
-        const fallbackResult = _fallbackEmailScan(emailContent, subject, body, type);
-        
-        // Still try to scan URLs even if ML server is down
-        const urlAnalysis = await _analyzeEmailUrls(emailContent);
-        if (urlAnalysis && urlAnalysis.hasHighRiskUrl) {
-            fallbackResult.isPhishing = true;
-            fallbackResult.urlDrivenPhishing = true;
-            fallbackResult.urls = urlAnalysis;
-            const urlList = urlAnalysis.phishingUrls.map(u => u.url).join(', ');
-            fallbackResult.suspiciousElements = `Phishing URL(s) detected: ${urlList}`;
-        } else if (urlAnalysis) {
-            fallbackResult.urls = urlAnalysis;
-        }
-        return fallbackResult;
+        console.warn('SafePhish: ML server unreachable, using fallback analysis.', err.message);
+        emailAnalysis = _fallbackEmailScan(emailContent);
+        // Normalize the fallback to match our new schema so the UI doesn't crash
+        emailAnalysis.components = {
+            mlContentScore: emailAnalysis.phishingProb || 0,
+            urlScore: maxUrlScore,
+            contextScore: 0,
+            behaviorScore: 0,
+            attachmentScore: attachmentScore
+        };
+        emailAnalysis.findings = emailAnalysis.suspiciousElements ? emailAnalysis.suspiciousElements.split(', ') : ["Rule-based fallback scan used."];
     }
 
-    // Build initial result from email analysis
-    let result = {
-        sender: extractSender(emailContent) || 'Unknown',
-        content: emailContent.substring(0, 120) + '…',
-        type,
+    // 3. Construct Final Result Object for UI
+    const resultToReturn = {
         isPhishing: emailAnalysis.isPhishing,
-        confidence: emailAnalysis.confidence,
-        suspiciousElements: emailAnalysis.isPhishing ? 'ML model identified phishing patterns in the email content.' : 'None detected',
-        analysis: '',
-        mlLabel: emailAnalysis.label,
-        phishingProb: emailAnalysis.phishingProbability,
-        urlDrivenPhishing: false,
-        urls: null
+        confidence: emailAnalysis.riskScore !== undefined ? emailAnalysis.riskScore : emailAnalysis.confidence, // map riskScore to confidence for backward compatibility
+        phishingProb: emailAnalysis.components ? emailAnalysis.components.mlContentScore : emailAnalysis.phishingProb, // map sub-score
+        analysis: emailAnalysis.analysis || 'See detailed findings in the UI context sections.',
+        suspiciousElements: emailAnalysis.findings ? emailAnalysis.findings.join(' | ') : emailAnalysis.suspiciousElements,
+        findings: emailAnalysis.findings || [],
+        components: emailAnalysis.components || {}
     };
 
-    // Now scan URLs in the email
-    const urlAnalysis = await _analyzeEmailUrls(emailContent);
-    
     if (urlAnalysis) {
-        result.urls = urlAnalysis;
-        
-        // ── Weighted Scoring: 70% URL + 30% Email Content Analysis ──
-        // Calculate URL phishing probability
-        const totalUrls = urlAnalysis.phishingUrls.length + urlAnalysis.legitimateUrls.length;
-        const urlPhishingProb = (urlAnalysis.phishingUrls.length / totalUrls) * 100;
-        
-        // Get email phishing probability
-        const emailPhishingProb = emailAnalysis.phishingProbability || result.phishingProb || 0;
-        
-        // Calculate combined score: 70% from URL, 30% from email analysis
-        const combinedPhishingProb = (urlPhishingProb * 0.7) + (emailPhishingProb * 0.3);
-        
-        // Determine final verdict: if combined > 50% → PHISHING, else LEGITIMATE
-        result.isPhishing = combinedPhishingProb > 50;
-        result.confidence = Math.round(combinedPhishingProb);
-        
-        // Build analysis message
-        if (result.isPhishing) {
-            if (urlAnalysis.hasHighRiskUrl) {
-                // Phishing verdict driven by URL detection
-                const urlList = urlAnalysis.phishingUrls.map(u => u.url).join(', ');
-                result.suspiciousElements = `Phishing URL(s) detected: ${urlList}`;
-                result.analysis = `⚠️ PHISHING EMAIL: This email contains ${urlAnalysis.phishingUrls.length} phishing URL(s) (weighted scoring: URL 70% + Email 30%). Do not click any links in this email.`;
-                result.urlDrivenPhishing = true;
-            } else {
-                // Phishing verdict from combined analysis
-                result.suspiciousElements = `Email content + URL combination flagged`;
-                result.analysis = `⚠️ ML model detected phishing patterns (weighted scoring: URL 70% + Email 30%, combined: ${Math.round(combinedPhishingProb)}% phishing probability). This email may attempt to steal credentials or personal data. Do not click any links or download attachments.`;
-            }
-        } else {
-            // Legitimate email
-            result.suspiciousElements = 'None detected (URL and email analysis combined)';
-            result.analysis = `✅ Email classified as legitimate (weighted scoring: URL 70% + Email 30%, combined: ${Math.round(combinedPhishingProb)}% phishing probability). Exercise normal caution with any links or attachments.`;
-        }
-    } else {
-        // No URLs found, use standard email analysis
-        const analysisText = result.isPhishing
-            ? `⚠️ ML model detected phishing content with ${result.phishingProb}% confidence. This email may attempt to steal credentials or personal data. Do not click any links or download attachments.`
-            : `✅ ML model classified this email as legitimate (${result.phishingProb}% phishing probability). Exercise normal caution with any links or attachments.`;
-        result.analysis = analysisText;
+        resultToReturn.urls = urlAnalysis;
     }
 
-    return result;
+    return resultToReturn;
 }
 
 /** Fallback rule-based email scan when the ML server is not running */
@@ -401,6 +390,60 @@ function _fallbackEmailScan(emailContent, subject, body, type) {
         mlLabel: isPhishing ? 'PHISHING' : 'LEGITIMATE',
         phishingProb: null
     };
+}
+
+// ── ML-Powered Attachment Scan ────────────────────────────────────────────────
+async function performAttachmentScan(base64Data, fileName, skipVT = false) {
+    try {
+        // Convert base64 to Blob
+        const byteString = atob(base64Data);
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i++) {
+            ia[i] = byteString.charCodeAt(i);
+        }
+        const blob = new Blob([ab]);
+
+        // Create FormData
+        const formData = new FormData();
+        formData.append('file', blob, fileName);
+        if (skipVT) {
+            formData.append('skip_vt', '1');
+        }
+
+        const response = await fetch(`${ML_SERVER}/analyze/attachment`, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) throw new Error(`Server error: ${response.status}`);
+
+        const result = await response.json();
+
+        return {
+            filename: result.filename,
+            hash: result.hash,
+            fileType: result.fileType,
+            fileSize: result.fileSize,
+            isMalicious: result.isMalicious,
+            riskScore: result.riskScore,
+            label: result.label,
+            findings: result.findings || [],
+            layers: result.layers || {},
+        };
+
+    } catch (err) {
+        console.warn('SafePhish: Attachment scan failed.', err.message);
+        return {
+            filename: fileName,
+            isMalicious: false,
+            riskScore: 0,
+            label: 'ERROR',
+            findings: [`Analysis failed: ${err.message}`],
+            layers: {},
+            error: err.message
+        };
+    }
 }
 
 // Helper function to extract sender from email content

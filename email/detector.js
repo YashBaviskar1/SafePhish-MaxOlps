@@ -140,7 +140,7 @@ class EmailDetector {
         const attachmentIndicators = ['attachment', 'enclosed', 'attached file', 'download'];
         const emailLower = emailContent.toLowerCase();
 
-        const hasAttachments = attachmentIndicators.some(indicator => 
+        const hasAttachments = attachmentIndicators.some(indicator =>
             emailLower.includes(indicator)
         );
 
@@ -205,10 +205,14 @@ class EmailDetector {
         // Extract all URLs (http, https, ftp)
         const urlRegex = /(https?:\/\/|ftp:\/\/)[^\s<>"{}|\\^`\[\]]+/gi;
         const urls = emailContent.match(urlRegex) || [];
+
+        // Normalize URLs (remove trailing slashes) before deduplication
+        // This prevents duplicate URL detection when same URL appears with/without trailing slash
+        const normalizedUrls = urls.map(url => url.replace(/\/+$/, ''));
         
         // Remove duplicates using Set
-        const uniqueUrls = [...new Set(urls)];
-        
+        const uniqueUrls = [...new Set(normalizedUrls)];
+
         // Return only the first 5 URLs to avoid performance issues
         return uniqueUrls.slice(0, 5);
     }
