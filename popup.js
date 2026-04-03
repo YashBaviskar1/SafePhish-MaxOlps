@@ -4,6 +4,9 @@ const emailTab = document.getElementById('email-tab');
 const toggleEmail = document.getElementById('toggleEmail');
 const toggleUrl = document.getElementById('toggleUrl');
 
+// Track whether a URL scan is currently running (so Scan Page button can wait)
+let isUrlScanRunning = false;
+
 toggleEmail.addEventListener('click', (e) => {
     e.preventDefault();
     urlTab.classList.add('hidden');
@@ -146,8 +149,102 @@ document.addEventListener('DOMContentLoaded', async () => {
             scanUrl();
         }
     });
+
+    // ── Wire up both Scan Page buttons ──
+    const scanDeceptiveBtn = document.getElementById('scanDeceptiveBtn');
+    const scanDeceptiveBtnEmail = document.getElementById('scanDeceptiveBtnEmail');
+    if (scanDeceptiveBtn) scanDeceptiveBtn.addEventListener('click', triggerDeceptiveScan);
+    if (scanDeceptiveBtnEmail) scanDeceptiveBtnEmail.addEventListener('click', triggerDeceptiveScan);
 });
 
+
+// ── Scan Page: detect hidden/deceptive clickable elements ──────────────────
+function setDeceptiveBtnsState(disabled, text) {
+    ['scanDeceptiveBtn', 'scanDeceptiveBtnEmail'].forEach(id => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        btn.disabled = disabled;
+        btn.textContent = text;
+    });
+}
+
+async function triggerDeceptiveScan() {
+    // If a URL scan is running, wait for it to finish first
+    if (isUrlScanRunning) {
+        setDeceptiveBtnsState(true, '⏳ Waiting…');
+        await new Promise(resolve => {
+            const poll = setInterval(() => {
+                if (!isUrlScanRunning) { clearInterval(poll); resolve(); }
+            }, 150);
+        });
+    }
+
+    setDeceptiveBtnsState(true, '🔍 Scanning…');
+
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab) {
+        setDeceptiveBtnsState(false, '🕵️ Scan Page');
+        return;
+    }
+
+    const sendScan = () => new Promise(resolve => {
+        chrome.tabs.sendMessage(tab.id, { action: 'scanDeceptiveUI' }, response => {
+            if (chrome.runtime.lastError) resolve(null);
+            else resolve(response);
+        });
+    });
+
+    let result = await sendScan();
+
+    // Content script might not be injected yet — try injecting then retry
+    if (!result) {
+        try {
+            await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content.js'] });
+            await new Promise(r => setTimeout(r, 400));
+            result = await sendScan();
+        } catch (err) {
+            showDeceptiveResult({
+                error: 'Cannot scan this page. ' +
+                       (tab.url.startsWith('file://') ?
+                        'For local files, go to chrome://extensions → Details and enable "Allow access to file URLs".' :
+                        'The extension could not access this page.')
+            });
+            setDeceptiveBtnsState(false, '🕵️ Scan Page');
+            return;
+        }
+    }
+
+    showDeceptiveResult(result || { count: 0 });
+    setDeceptiveBtnsState(false, '🕵️ Scan Page');
+}
+
+function showDeceptiveResult(result) {
+    const div = document.getElementById('deceptiveResult');
+    const content = document.getElementById('deceptiveResultContent');
+    if (!div || !content) return;
+
+    if (result.error) {
+        content.innerHTML = `
+            <div class="result-header risk-error">
+                <h3>⚠️ Cannot Scan</h3>
+                <p>${result.error}</p>
+            </div>`;
+    } else if (result.count > 0) {
+        content.innerHTML = `
+            <div class="result-header risk-high">
+                <h3>🚨 ${result.count} Deceptive Element${result.count !== 1 ? 's' : ''} Found!</h3>
+                <p>Hidden clickable areas have been highlighted directly on the page.</p>
+            </div>`;
+    } else {
+        content.innerHTML = `
+            <div class="result-header risk-safe">
+                <h3>✅ Page Looks Clean</h3>
+                <p>No hidden or deceptive clickable elements detected.</p>
+            </div>`;
+    }
+
+    div.classList.remove('hidden');
+}
 
 // URL Scanner
 document.getElementById('scanUrlBtn').addEventListener('click', scanUrl);
@@ -303,11 +400,13 @@ function displayEmailError(message) {
 
 // Loading Indicators
 function showUrlLoading() {
+    isUrlScanRunning = true;           // ← mark scan as in-progress
     document.getElementById('urlLoading').classList.remove('hidden');
     document.getElementById('urlResult').classList.add('hidden');
 }
 
 function hideUrlLoading() {
+    isUrlScanRunning = false;          // ← mark scan as done
     document.getElementById('urlLoading').classList.add('hidden');
 }
 

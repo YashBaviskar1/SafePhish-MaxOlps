@@ -24,6 +24,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return true;
     }
 
+    if (request.action === 'scanDeceptiveUI') {
+        try {
+            const count = detectDeceptiveUI();
+            sendResponse({ success: true, count });
+        } catch (e) {
+            sendResponse({ success: false, error: e.message, count: 0 });
+        }
+        return true;
+    }
+
     return true;
 });
 
@@ -165,6 +175,135 @@ function extractSubjectOnly() {
     }
 
     return subject || 'Unknown Subject';
+}
+
+// --- Feature: UI Deception Detection ---
+function detectDeceptiveUI() {
+    let deceptiveCount = 0;
+
+    // Query every potentially interactive element
+    const clickableElements = document.querySelectorAll(
+        'a[href], [onclick], button, [role="button"], [role="link"]'
+    );
+
+    const flag = (el, reason) => {
+        deceptiveCount++;
+        el.dataset.safephishFlagged = 'true';
+
+        el.style.setProperty('outline',           '3px dashed #ef4444', 'important');
+        el.style.setProperty('outline-offset',    '3px',                'important');
+        el.style.setProperty('background-color',  'rgba(239,68,68,0.12)', 'important');
+        el.title = `\u26a0\ufe0f SafePhish: ${reason}`;
+
+        const badge = document.createElement('span');
+        badge.textContent = `\u26a0\ufe0f ${reason}`;
+        badge.style.cssText = [
+            'display:inline-block',
+            'position:absolute',
+            'top:-22px',
+            'left:0',
+            'background:#ef4444',
+            'color:#fff',
+            'font:bold 10px/1 Arial,sans-serif',
+            'padding:3px 7px',
+            'border-radius:4px',
+            'pointer-events:none',
+            'white-space:nowrap',
+            'z-index:2147483647',
+            'box-shadow:0 2px 6px rgba(0,0,0,.35)',
+        ].join(';');
+
+        const cs = window.getComputedStyle(el);
+        if (cs.position === 'static') {
+            el.style.setProperty('position', 'relative', 'important');
+        }
+        try { el.appendChild(badge); } catch (_) {}
+    };
+
+    clickableElements.forEach(el => {
+        if (el.dataset.safephishFlagged) return;
+
+        const cs   = window.getComputedStyle(el);
+        const rect = el.getBoundingClientRect();
+
+        // Skip layout-invisible elements
+        if (cs.display === 'none' || cs.visibility === 'hidden') return;
+        if (rect.width < 1 || rect.height < 1) return;
+
+        const opacity    = parseFloat(cs.opacity);
+        const hasText    = (el.innerText || el.textContent || '').trim().length > 0;
+        const tag        = el.tagName.toLowerCase();
+        const isAnchor   = tag === 'a';
+        const isButton   = tag === 'button';
+        const hasOnclick = el.hasAttribute('onclick');
+
+        // textDecoration: Chrome returns shorthand like "none solid rgb(0,0,0)"
+        const tdFull    = cs.textDecoration     || '';
+        const tdLine    = cs.textDecorationLine || '';
+        const hasUnderline = tdFull.includes('underline') || tdLine.includes('underline');
+
+        const cursor     = cs.cursor;
+        const isPointer  = cursor === 'pointer';
+        const isTextlike = cursor === 'text' || cursor === 'default' || cursor === 'auto';
+
+        const elBg      = cs.backgroundColor;
+        const isTransBg = elBg === 'rgba(0, 0, 0, 0)' || elBg === 'transparent';
+
+        // ---------------------------------------------------------------
+        // RULE 1 — Invisible/zero-opacity clickable element (overlay attack)
+        //   e.g. <a style="opacity:0; position:absolute; width:100%; height:100%">
+        // ---------------------------------------------------------------
+        if (opacity <= 0.05 && rect.width > 5 && rect.height > 5) {
+            flag(el, 'Invisible clickable overlay');
+            return;
+        }
+
+        // ---------------------------------------------------------------
+        // RULE 2 — Anchor with href but NO underline (disguised as body text)
+        //   e.g. <a href="..." style="text-decoration:none; color:black">
+        //   Allow it only if it clearly looks like a styled button
+        // ---------------------------------------------------------------
+        if (isAnchor && el.hasAttribute('href') && hasText && !hasUnderline) {
+            const hasPadding    = parseFloat(cs.paddingTop) > 4 || parseFloat(cs.paddingLeft) > 8;
+            const hasBorder     = parseFloat(cs.borderWidth) > 0 && cs.borderStyle !== 'none';
+            const hasExplicitBg = !isTransBg;
+            const looksLikeBtn  = hasPadding && (hasBorder || hasExplicitBg);
+
+            if (!looksLikeBtn) {
+                flag(el, 'Link disguised as plain text');
+                return;
+            }
+        }
+
+        // ---------------------------------------------------------------
+        // RULE 3 — onclick on a non-button/non-anchor element (hidden JS handler)
+        //   e.g. <p onclick="..."> or <div onclick="..."> that looks like text
+        //   Key: cursor is NOT pointer, so user can't tell it's clickable
+        // ---------------------------------------------------------------
+        if (hasOnclick && !isButton && !isAnchor && hasText && !isPointer) {
+            flag(el, 'Hidden JavaScript click handler');
+            return;
+        }
+
+        // ---------------------------------------------------------------
+        // RULE 4 — Transparent absolute/fixed overlay element (clickjacking)
+        //   e.g. empty <a> sitting on top of other content
+        // ---------------------------------------------------------------
+        if ((cs.position === 'absolute' || cs.position === 'fixed') && (isAnchor || isButton || hasOnclick)) {
+            if (!hasText && isTransBg && cs.backgroundImage === 'none' && rect.width > 20 && rect.height > 10) {
+                flag(el, 'Transparent clickjacking overlay');
+                return;
+            }
+        }
+    });
+
+    if (deceptiveCount > 0) {
+        showToast(`\ud83d\udea8 SafePhish: ${deceptiveCount} deceptive element${deceptiveCount !== 1 ? 's' : ''} found \u2014 highlighted on page.`);
+    } else {
+        showToast('\u2705 SafePhish: No deceptive UI elements detected.');
+    }
+
+    return deceptiveCount;
 }
 
 // Simple toast notification system

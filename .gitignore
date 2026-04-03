@@ -37,3 +37,7 @@ uv.lock
 # OS files
 .DS_Store
 Thumbs.db
+
+
+#For testing the hidden phishing links in web page
+test.html
