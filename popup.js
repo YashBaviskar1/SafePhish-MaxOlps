@@ -405,7 +405,8 @@ function displayUrlResult(result) {
                     confidence: result.confidence,
                     features: result.features,
                     mlLabel: result.mlLabel,
-                    phishingProb: result.phishingProb
+                    phishingProb: result.phishingProbability,
+                    topFeatures: result.topFeatures || []
                 } 
             }, () => {
                 chrome.tabs.create({ url: 'features.html' });

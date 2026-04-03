@@ -18,6 +18,7 @@ import time
 import numpy as np
 import requests as http_requests
 import re
+import xgboost as xgb
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -84,6 +85,58 @@ URL_FEATURE_ORDER = [
     "StatsReport",
 ]
 
+def calculate_top_features(model, features_dict):
+    """
+    Calculates local feature importance (contributions) using XGBoost's built-in pred_contribs.
+    Returns the top 8 features that influenced the result.
+    """
+    try:
+        # Build vector in correct order
+        vector = [features_dict.get(f, 0) for f in URL_FEATURE_ORDER]
+        X = np.array([vector], dtype=float)
+        
+        # Get contributions (SHAP-like values from XGBoost)
+        if hasattr(model, "get_booster"):
+            booster = model.get_booster()
+        else:
+            booster = model
+            
+        # booster.predict returns contributions if pred_contribs=True
+        dmat = xgb.DMatrix(X, feature_names=URL_FEATURE_ORDER)
+        contribs = booster.predict(dmat, pred_contribs=True)
+        
+        # Handle different output shapes (binary vs multiclass)
+        if len(contribs.shape) == 2:
+            # Binary: shape is (1, num_features + 1)
+            raw_scores = contribs[0]
+        elif len(contribs.shape) == 3:
+            # Multiclass: shape is (1, num_classes, num_features + 1)
+            # We take the first class's contributions (usually class 0 or class -1)
+            raw_scores = contribs[0][0]
+        else:
+            raw_scores = contribs.flatten()
+
+        # Map back to feature names (excluding bias)
+        feature_contribs = []
+        for i, name in enumerate(URL_FEATURE_ORDER):
+            if i < len(raw_scores):
+                score = float(raw_scores[i])
+                feature_contribs.append({
+                    "feature": name,
+                    "score": round(score, 4),
+                    "abs_score": abs(score)
+                })
+            
+        # Sort by absolute score descending and take top 4
+        top_4 = sorted(feature_contribs, key=lambda x: x["abs_score"], reverse=True)[:4]
+        
+        return [{"feature": x["feature"], "score": x["score"]} for x in top_4]
+        
+    except Exception as e:
+        print(f"⚠️ Error calculating explainability: {e}")
+        traceback.print_exc()
+        return []
+
 # ─── Endpoints ────────────────────────────────────────────────────────────────
 
 @app.route("/health", methods=["GET"])
@@ -133,12 +186,16 @@ def predict_url():
         phish_prob  = float(proba[phish_idx])
         is_phishing = phish_prob >= 0.5
 
+        # Calculate explainability (Top 8 Drivers)
+        top_features = calculate_top_features(url_model, features)
+
         return jsonify({
             "isPhishing": is_phishing,
             "confidence": round(phish_prob * 100 if is_phishing else (1 - phish_prob) * 100, 1),
             "phishingProbability": round(phish_prob * 100, 1),
             "label": "PHISHING" if is_phishing else "LEGITIMATE",
-            "features": features
+            "features": features,
+            "topFeatures": top_features
         })
 
     except Exception as e:

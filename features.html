@@ -54,12 +54,29 @@
                 </div>
             </section>
 
-            <div class="feature-grid" id="featureGrid">
-                <!-- Features will be injected here via features.js -->
-                <div class="loading-state">
-                    <p>Loading feature analysis...</p>
+            <section class="features-section">
+                <div class="section-header">
+                    <h2>📊 Full Predictive Feature Breakdown</h2>
+                    <p>All signal values extracted from the URL and evaluated by the model.</p>
                 </div>
-            </div>
+                <div class="feature-grid" id="featureGrid">
+                    <!-- Features will be injected here by features.js -->
+                    <div class="loading-state">
+                        <p>Loading feature data...</p>
+                    </div>
+                </div>
+            </section>
+            <section class="explainability-section" id="explainabilitySection">
+                <div class="section-header">
+                    <h2>🧠 Neural Explainability Drivers</h2>
+                    <p>These are the top 4 factors that most influenced our AI's decision for this URL.</p>
+                </div>
+                <div class="drivers-container" id="driversContainer">
+                    <div class="loading-state">
+                        <p>Analyzing key drivers...</p>
+                    </div>
+                </div>
+            </section>
         </main>
 
         <footer>
