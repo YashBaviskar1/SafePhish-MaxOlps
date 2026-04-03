@@ -197,7 +197,7 @@ const UrlReport = () => {
           </div>
           
           {isMatrixExpanded && (
-            <div className="p-1 max-h-[500px] overflow-y-auto custom-scrollbar">
+            <div className="p-0 max-h-[500px] overflow-y-auto custom-scrollbar">
               <table className="w-full text-left border-collapse">
                 <thead className="sticky top-0 bg-[#060819] z-10 shadow-md">
                   <tr className="text-[10px] uppercase tracking-widest text-[#76767f] border-b border-[#76767f]/20">

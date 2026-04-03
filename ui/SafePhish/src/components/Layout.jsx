@@ -1,5 +1,5 @@
 import React from 'react';
-import Sidebar from './SideBar'
+import Sidebar from './Sidebar'
 import Navbar from './Navbar';
 import Footer from './Footer';
 
@@ -8,7 +8,7 @@ const Layout = ({ children, currentPage, setCurrentPage }) => {
     <div className="bg-[#060819] text-[#aab3d8] font-sans min-h-screen selection:bg-[#aab3d8] selection:text-[#060819] flex">
       <Sidebar currentPage={currentPage} setCurrentPage={setCurrentPage} />
       
-      <main className="ml-64 flex-1 pb-20 relative min-h-screen flex flex-col">
+      <main className="ml-64 flex-1 pb-20 relative min-h-screen flex flex-col" style={{ zoom: 0.95 }}>
         <Navbar currentPage={currentPage} />
         
         {/* Dynamic Page Content goes here */}

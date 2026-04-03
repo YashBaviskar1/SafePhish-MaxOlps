@@ -356,36 +356,46 @@ function displayUrlResult(result) {
     const riskLevel = result.isPhishing ? 'PHISHING' : 'LEGITIMATE';
     const riskColor = result.isPhishing ? 'risk-high' : 'risk-safe';
 
-    const mlBadge = result.phishingProb !== null
-        ? `<span style="font-size:11px;background:rgba(255,255,255,0.2);padding:2px 8px;border-radius:12px;margin-left:8px;">🤖 ML Model</span>`
-        : `<span style="font-size:11px;background:rgba(255,255,255,0.15);padding:2px 8px;border-radius:12px;margin-left:8px;">📐 Rule-based</span>`;
+    // Explainability Factor Logic (from user's recent update)
+    let explainabilityHtml = '';
+    if (result.topFeatures && result.topFeatures.length > 0) {
+        const top4 = result.topFeatures.slice(0, 4);
+        const featureList = top4.map(f => {
+            const isRisky = f.score < 0; 
+            const icon = isRisky ? '🚨' : '🛡️';
+            return `${icon} ${f.feature}`;
+        }).join(', ');
+        explainabilityHtml = `
+            <div class="detail-item">
+                <strong>🧠 Explainability</strong>
+                <p>Key Factors: ${featureList}. These indicators most influenced the ${riskLevel} verdict.</p>
+            </div>`;
+    } else {
+        explainabilityHtml = `
+            <div class="detail-item">
+                <strong>🧠 Explainability</strong>
+                <p>${result.analysis || 'Analysis complete.'}</p>
+            </div>`;
+    }
 
-    const probLine = result.phishingProb !== null
-        ? `<div class="detail-item"><strong>Phishing Probability:</strong><p>${result.phishingProb}%</p></div>`
-        : '';
+    const probVal = result.phishingProb !== null ? result.phishingProb : (result.phishingProbability !== undefined ? result.phishingProbability : null);
 
     contentDiv.innerHTML = `
         <div class="result-header ${riskColor}">
-            <h3>${riskLevel}${mlBadge}</h3>
+            <h3>${riskLevel}</h3>
             <p>Confidence: ${result.confidence}%</p>
         </div>
         <div class="result-details">
             <div class="detail-item">
-                <strong>URL:</strong>
+                <strong>URL</strong>
                 <p>${escapeHtml(result.url)}</p>
             </div>
-            ${probLine}
-            <div class="detail-item">
-                <strong>Status:</strong>
-                <p>${result.isPhishing ? '⚠️ Potential Phishing' : '✅ Legitimate'}</p>
-            </div>
-            <div class="detail-item">
-                <strong>Analysis:</strong>
-                <p>${result.analysis || 'No additional details available'}</p>
-            </div>
-            <div style="margin-top: 15px; text-align: center;">
-                <button id="viewFeaturesBtn" class="action-btn" style="width: 100%; padding: 10px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; cursor: pointer; border-radius: 8px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s ease;">
-                    📊 View Detailed Feature Analysis
+            ${probVal !== null ? `<div class="detail-item"><strong>Probability</strong><p>${probVal}%</p></div>` : ''}
+            ${explainabilityHtml}
+            <div style="margin-top: 1rem;">
+                <button id="viewFeaturesBtn" class="btn btn-secondary">
+                    <span class="material-symbols-outlined">analytics</span>
+                    Detailed Analysis
                 </button>
             </div>
         </div>
@@ -393,7 +403,6 @@ function displayUrlResult(result) {
 
     resultDiv.classList.remove('hidden');
 
-    // Attach listener for the new button
     const btn = document.getElementById('viewFeaturesBtn');
     if (btn) {
         btn.addEventListener('click', () => {
@@ -413,10 +422,6 @@ function displayUrlResult(result) {
                 chrome.tabs.create({ url: 'index.html?page=url_report' });
             });
         });
-
-        // Add hover effect via JS since it's an inline style
-        btn.onmouseover = () => btn.style.background = 'rgba(255,255,255,0.2)';
-        btn.onmouseout = () => btn.style.background = 'rgba(255,255,255,0.1)';
     }
 }
 
@@ -427,142 +432,100 @@ function displayEmailResult(result) {
     const riskLevel = result.isPhishing ? 'PHISHING' : 'LEGITIMATE';
     const riskColor = result.isPhishing ? 'risk-high' : 'risk-safe';
 
-    const mlBadge = result.phishingProb !== null
-        ? `<span style="font-size:11px;background:rgba(255,255,255,0.2);padding:2px 8px;border-radius:12px;margin-left:8px;">🤖 ML Model</span>`
-        : `<span style="font-size:11px;background:rgba(255,255,255,0.15);padding:2px 8px;border-radius:12px;margin-left:8px;">📐 Rule-based</span>`;
-
-    const probLine = result.phishingProb !== null
-        ? `<div class="detail-item"><strong>Phishing Probability:</strong><p>${result.phishingProb}%</p></div>`
-        : '';
-
     // Build URL display section if URLs were scanned
     let urlSection = '';
     if (result.urls) {
         const { phishingUrls, legitimateUrls, summary } = result.urls;
-        
-        // Create URL verdict list
         let urlVerdictList = '';
         
-        // Add phishing URLs first
         if (phishingUrls && phishingUrls.length > 0) {
             phishingUrls.forEach(urlData => {
                 urlVerdictList += `
-                    <div style="margin: 8px 0; padding: 8px; background: rgba(255, 69, 69, 0.1); border-left: 3px solid #ff4545; border-radius: 4px;">
-                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
-                            <span style="font-size: 18px;">⚠️</span>
-                            <strong style="color: #ff6b6b; flex: 1; word-break: break-all; font-size: 12px;">${escapeHtml(urlData.url)}</strong>
-                            <span style="background: #ff4545; color: white; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold;">${urlData.confidence}%</span>
+                    <div class="finding-item finding-sandbox" style="border-left-color: var(--danger);">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px;">
+                            <span style="font-weight: 800; font-size: 0.75rem;">🚨 PHISHING</span>
+                            <span style="font-size: 0.65rem; opacity: 0.7;">${urlData.confidence}%</span>
                         </div>
-                        <div style="font-size: 11px; color: #ff6b6b;">PHISHING</div>
-                    </div>
-                `;
+                        <p style="font-size: 0.7rem; opacity: 0.9; margin: 0; word-break: break-all;">${escapeHtml(urlData.url)}</p>
+                    </div>`;
             });
         }
         
-        // Add legitimate URLs
         if (legitimateUrls && legitimateUrls.length > 0) {
             legitimateUrls.forEach(urlData => {
                 urlVerdictList += `
-                    <div style="margin: 8px 0; padding: 8px; background: rgba(76, 175, 80, 0.1); border-left: 3px solid #4caf50; border-radius: 4px;">
-                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
-                            <span style="font-size: 18px;">✅</span>
-                            <strong style="color: #4caf50; flex: 1; word-break: break-all; font-size: 12px;">${escapeHtml(urlData.url)}</strong>
-                            <span style="background: #4caf50; color: white; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold;">${urlData.confidence}%</span>
+                    <div class="finding-item finding-sandbox" style="border-left-color: var(--safe);">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px;">
+                            <span style="font-weight: 800; font-size: 0.75rem;">🛡️ SAFE</span>
+                            <span style="font-size: 0.65rem; opacity: 0.7;">${urlData.confidence}%</span>
                         </div>
-                        <div style="font-size: 11px; color: #4caf50;">LEGITIMATE</div>
-                    </div>
-                `;
+                        <p style="font-size: 0.7rem; opacity: 0.9; margin: 0; word-break: break-all;">${escapeHtml(urlData.url)}</p>
+                    </div>`;
             });
         }
 
         urlSection = `
             <div class="detail-item">
-                <strong>🔗 URLs Found in Email: ${summary}</strong>
-                <div style="margin-top: 10px;">
+                <strong>🔗 Embedded Links (${summary})</strong>
+                <div style="margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.375rem;">
                     ${urlVerdictList}
                 </div>
-            </div>
-        `;
+            </div>`;
     }
 
     let componentsSection = '';
     if (result.components) {
         const c = result.components;
         componentsSection = `
-            <div class="detail-item" style="background: rgba(0,0,0,0.05); padding: 12px; border-radius: 8px; margin-top: 10px;">
-                <strong style="display:block; margin-bottom: 8px; font-size: 14px;">📊 5-Engine Master Breakdown</strong>
-                
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
-                    <span style="font-size: 13px;">📧 Email Content (ML Score):</span>
-                    <span style="font-weight:bold; font-size: 13px; color: ${c.mlContentScore >= 50 ? '#ff6b6b' : '#4caf50'};">${c.mlContentScore}/100</span>
+            <div class="detail-item">
+                <strong>📊 5-Engine Master Breakdown</strong>
+                <div style="display: flex; flex-direction: column; gap: 2px; margin-top: 0.5rem;">
+                    ${[
+                        { label: '📧 Email Content', score: c.mlContentScore },
+                        { label: '🔗 URL Risk', score: c.urlScore },
+                        { label: '🕸️ Behavioral', score: c.behaviorScore },
+                        { label: '🕵️ Contextual', score: c.contextScore },
+                        { label: '📎 Attachments', score: c.attachmentScore || 0 },
+                        { label: '🤖 AI Pattern (LLM)', score: c.aiFingerprintScore || 0 }
+                    ].map(engine => `
+                        <div style="display: flex; justify-content: space-between; font-size: 0.75rem; padding: 2px 0;">
+                            <span style="color: var(--text-muted);">${engine.label}</span>
+                            <span style="font-weight: 700; color: ${engine.score >= 50 ? 'var(--danger)' : 'var(--safe)'}">${engine.score}/100</span>
+                        </div>
+                    `).join('')}
                 </div>
-                
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
-                    <span style="font-size: 13px;">🔗 URL Risk (ML Score):</span>
-                    <span style="font-weight:bold; font-size: 13px; color: ${c.urlScore >= 50 ? '#ff6b6b' : '#4caf50'};">${c.urlScore || 0}/100</span>
-                </div>
-                
-                <div style="d${c.aiFingerprintScore > 0 ? c.aiFingerprintScore + '/100' : 'No Patterns'}isplay:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
-                    <span style="font-size: 13px;">🕸️ Behavioral Intent:</span>
-                    <span style="font-weight:bold; font-size: 13px; color: ${c.behaviorScore >= 30 ? '#ff6b6b' : '#4caf50'};">${c.behaviorScore || 0}/100</span>
-                </div>
-                
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
-                    <span style="font-size: 13px;">🕵️ Contextual Anomalies:</span>
-                    <span style="font-weight:bold; font-size: 13px; color: ${c.contextScore >= 30 ? '#ff6b6b' : '#4caf50'};">${c.contextScore || 0}/100</span>
-                </div>
-                
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
-                    <span style="font-size: 13px;">📎 Attachment Analysis:</span>
-                    <span style="font-weight:bold; font-size: 13px; color: ${c.attachmentScore >= 30 ? '#ff6b6b' : (c.attachmentScore > 0 ? '#ffb347' : '#888')};">${c.attachmentScore > 0 ? c.attachmentScore + '/100' : 'No Attachment'}</span>
-                </div>
-                
-<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
-    <span style="font-size: 13px;">🤖 AI Pattern (LLM):</span>
-    <span style="font-weight:bold; font-size: 13px; color: ${c.aiFingerprintScore >= 50 ? '#ff6b6b' : (c.aiFingerprintScore > 0 ? '#ffb347' : '#888')};">
-        ${(c.aiFingerprintScore !== undefined && c.aiFingerprintScore !== null) ? c.aiFingerprintScore + '/100' : 'No Patterns'}
-    </span>
-</div>
-            </div>
-        `;
+            </div>`;
     }
 
     let findingsSection = '';
     if (result.findings && result.findings.length > 0) {
-        let findingsList = result.findings.map(f => `<li style="margin-bottom: 4px; font-size: 12px; line-height: 1.4;">${escapeHtml(f)}</li>`).join('');
+        let findingsList = result.findings.map(f => `<div class="finding-item"><p style="margin: 0;">${escapeHtml(f)}</p></div>`).join('');
         findingsSection = `
             <div class="detail-item">
-                <strong style="margin-bottom: 6px; display:block;">🔍 Explainability Findings:</strong>
-                <ul style="padding-left: 20px; margin: 0; color: #ddd;">
+                <strong>🔍 Explainability Findings</strong>
+                <div style="margin-top: 0.5rem; display: flex; flex-direction: column; gap: 4px;">
                     ${findingsList}
-                </ul>
-            </div>
-        `;
+                </div>
+            </div>`;
     }
 
     contentDiv.innerHTML = `
         <div class="result-header ${riskColor}">
-            <h3>${riskLevel}${mlBadge}</h3>
+            <h3>${riskLevel}</h3>
             <p>Total Master Risk Score: ${result.confidence}/100</p>
         </div>
         <div class="result-details">
             ${componentsSection}
-            
-            <div class="detail-item" style="margin-top: 15px;">
-                <strong>Verdict:</strong>
-                <p style="font-size: 13px;">${result.isPhishing ? '⚠️ Potential Phishing via 5-Engine Analysis' : '✅ Looks Safe across all components'}</p>
+            <div class="detail-item">
+                <strong>Verdict</strong>
+                <p>${result.isPhishing ? '⚠️ Potential Phishing via 5-Engine Analysis' : '✅ Looks Safe across all components'}</p>
             </div>
-            
             ${urlSection}
-            
             ${findingsSection}
-            
-            <div class="detail-item" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px; margin-top: 15px;">
-                <p style="font-size: 11px; opacity: 0.8; font-style: italic;">${result.analysis || 'Analysis complete.'}</p>
-            </div>
-            <div style="margin-top: 15px; text-align: center;">
-                <button id="viewEmailFeaturesBtn" class="action-btn" style="width: 100%; padding: 10px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; cursor: pointer; border-radius: 8px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s ease;">
-                    📊 View Detailed Email Analysis
+            <div style="margin-top: 1rem;">
+                <button id="viewEmailFeaturesBtn" class="btn btn-secondary">
+                    <span class="material-symbols-outlined">analytics</span>
+                    Detailed Analysis
                 </button>
             </div>
         </div>
@@ -570,7 +533,6 @@ function displayEmailResult(result) {
 
     resultDiv.classList.remove('hidden');
 
-    // Add listener for the new button
     const btn = document.getElementById('viewEmailFeaturesBtn');
     if (btn) {
         btn.addEventListener('click', () => {
@@ -578,8 +540,6 @@ function displayEmailResult(result) {
                 chrome.tabs.create({ url: 'index.html?page=email_report' });
             });
         });
-        btn.onmouseover = () => btn.style.background = 'rgba(255,255,255,0.2)';
-        btn.onmouseout = () => btn.style.background = 'rgba(255,255,255,0.1)';
     }
 }
 
@@ -995,35 +955,35 @@ function displayAttachmentResult(result) {
 
     contentDiv.innerHTML = `
         <div class="result-header ${riskColor}">
-            <h3>${riskEmoji} ${result.label}</h3>
+            <h3>${result.label}</h3>
             <p>Risk Score: ${result.riskScore}/100</p>
         </div>
         <div class="result-details">
             <div class="detail-item">
-                <strong>File:</strong>
+                <strong>File</strong>
                 <p>${escapeHtml(result.filename || 'unknown')}</p>
             </div>
             <div class="detail-item">
-                <strong>Type:</strong>
+                <strong>Type</strong>
                 <p>${escapeHtml(result.fileType || 'unknown')}</p>
             </div>
             <div class="detail-item">
-                <strong>SHA-256:</strong>
-                <p style="font-size:10px;word-break:break-all;font-family:monospace;">${result.hash || 'N/A'}</p>
+                <strong>SHA-256</strong>
+                <p style="font-size: 0.65rem; word-break: break-all; opacity: 0.7; font-family: var(--font-mono);">${result.hash || 'N/A'}</p>
             </div>
 
             <div class="layers-section">
-                <strong>Defense-in-Depth Layers:</strong>
-                <div class="layer-badges">
+                <strong>Defense-in-Depth Layers</strong>
+                <div style="margin-top: 0.5rem; display: flex; flex-direction: column; gap: 4px;">
                     ${sandboxBadge}
                     ${vtHashBadge}
                     ${vtDetBadge}
                 </div>
             </div>
 
-            <div class="findings-section">
-                <strong>Findings & Explainability:</strong>
-                <div class="findings-list">
+            <div class="layers-section" style="border-top: none; margin-top: 0.5rem; padding-top: 0;">
+                <strong>Findings & Explainability</strong>
+                <div style="margin-top: 0.5rem; display: flex; flex-direction: column; gap: 4px;">
                     ${findingsHtml}
                 </div>
             </div>
