@@ -214,7 +214,20 @@ async function triggerDeceptiveScan() {
         }
     }
 
-    showDeceptiveResult(result || { count: 0 });
+    showDeceptiveResult(result || { count: 0, urls: [] });
+    
+    // Auto-scan the first hidden URL found
+    if (result && result.urls && result.urls.length > 0) {
+        document.getElementById('email-tab').classList.add('hidden');
+        document.getElementById('url-tab').classList.remove('hidden');
+        document.getElementById('urlInput').value = result.urls[0];
+        
+        // Minor delay to let the user digest the "deceptive elements found" result before the loader starts
+        setTimeout(() => {
+            scanUrl();
+        }, 1200);
+    }
+
     setDeceptiveBtnsState(false, '🕵️ Scan Page');
 }
 

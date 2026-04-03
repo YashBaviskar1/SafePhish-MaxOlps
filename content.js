@@ -26,10 +26,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     if (request.action === 'scanDeceptiveUI') {
         try {
-            const count = detectDeceptiveUI();
-            sendResponse({ success: true, count });
+            const scanResult = detectDeceptiveUI();
+            sendResponse({ success: true, count: scanResult.count, urls: scanResult.urls });
         } catch (e) {
-            sendResponse({ success: false, error: e.message, count: 0 });
+            sendResponse({ success: false, error: e.message, count: 0, urls: [] });
         }
         return true;
     }
@@ -180,6 +180,7 @@ function extractSubjectOnly() {
 // --- Feature: UI Deception Detection ---
 function detectDeceptiveUI() {
     let deceptiveCount = 0;
+    const foundUrls = new Set();
 
     // Query every potentially interactive element
     const clickableElements = document.querySelectorAll(
@@ -188,6 +189,14 @@ function detectDeceptiveUI() {
 
     const flag = (el, reason) => {
         deceptiveCount++;
+        
+        if (el.tagName.toLowerCase() === 'a' && el.hasAttribute('href')) {
+            foundUrls.add(el.href);
+        } else if (el.hasAttribute('onclick')) {
+            const match = el.getAttribute('onclick').match(/['"](https?:\/\/[^'"]+)['"]/);
+            if (match) foundUrls.add(match[1]);
+        }
+
         el.dataset.safephishFlagged = 'true';
 
         el.style.setProperty('outline',           '3px dashed #ef4444', 'important');
@@ -303,7 +312,7 @@ function detectDeceptiveUI() {
         showToast('\u2705 SafePhish: No deceptive UI elements detected.');
     }
 
-    return deceptiveCount;
+    return { count: deceptiveCount, urls: Array.from(foundUrls) };
 }
 
 // Simple toast notification system
