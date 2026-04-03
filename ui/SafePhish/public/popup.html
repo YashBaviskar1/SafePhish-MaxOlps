@@ -56,6 +56,15 @@
                 <input type="text" id="emailSender" placeholder="Sender Email (e.g. alerts@company.com)..." class="input-field">
                 <input type="text" id="emailSubject" placeholder="Email Subject..." class="input-field">
                 <textarea id="emailBody" placeholder="Email Body..." class="input-field textarea-field"></textarea>
+                <div class="engine-toggles">
+                    <div class="toggle-group">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="aiToggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="toggle-label">Detect AI Patterns (LLM)</span>
+                    </div>
+                </div>
                 <button id="scanEmailBtn" class="btn btn-primary">Scan Email</button>
             </div>
 

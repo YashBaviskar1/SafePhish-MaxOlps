@@ -86,18 +86,25 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // ── B. Have ready-made email content (right-click page scan / double-click) ──
         if (response && response.type === 'email' && response.content) {
-            // Check if there's a From: line
-            const match = response.content.match(/^From:\s*(.+)/m);
-            if (match) {
-                document.getElementById('emailSender').value = match[1].trim();
+            let content = response.content;
+            
+            // 1. Extract From: line if present
+            const fromMatch = content.match(/^From:\s*(.+)$/mi);
+            if (fromMatch) {
+                document.getElementById('emailSender').value = fromMatch[1].trim();
+                content = content.replace(/^From:\s*.+$/mi, '').trimStart();
             }
-            if (response.content.startsWith('Subject:')) {
-                const parts = response.content.split('\n\n');
-                document.getElementById('emailSubject').value = parts[0].replace('Subject:', '').trim();
-                document.getElementById('emailBody').value    = parts.slice(1).join('\n\n').trim();
-            } else {
-                document.getElementById('emailBody').value = response.content;
+            
+            // 2. Extract Subject: line if present
+            const subjectMatch = content.match(/^Subject:\s*(.+)$/mi);
+            if (subjectMatch) {
+                document.getElementById('emailSubject').value = subjectMatch[1].trim();
+                content = content.replace(/^Subject:\s*.+$/mi, '').trimStart();
             }
+            
+            // 3. The rest is the body
+            document.getElementById('emailBody').value = content.trim();
+
             emailTab.classList.remove('hidden');
             urlTab.classList.add('hidden');
             scanEmail();
@@ -322,11 +329,14 @@ async function scanEmail() {
         const emailContent = `Subject: ${emailSubject}\n\n${emailBody}`;
         const emailSender = document.getElementById('emailSender').value.trim();
 
+        const aiToggle = document.getElementById('aiToggle');
+
         const result = await chrome.runtime.sendMessage({
             action: 'scanEmail',
             content: emailContent,
             sender: emailSender,
-            type: 'text'
+            type: 'text',
+            enableAIDetection: aiToggle ? aiToggle.checked : false
         });
 
         displayEmailResult(result);
@@ -387,17 +397,9 @@ function displayUrlResult(result) {
     const btn = document.getElementById('viewFeaturesBtn');
     if (btn) {
         btn.addEventListener('click', () => {
-            // Store results for the detail page
-            chrome.storage.local.set({ 
-                lastAnalysis: {
-                    url: result.url,
-                    isPhishing: result.isPhishing,
-                    confidence: result.confidence,
-                    features: result.features,
-                    mlLabel: result.mlLabel,
-                    phishingProb: result.phishingProb
-                } 
-            }, () => {
+            // Store the full result for the React app
+            chrome.storage.local.set({ lastAnalysis: result }, () => {
+                // Open the React app index file, passing a URL parameter
                 chrome.tabs.create({ url: 'index.html?page=url_report' });
             });
         });
@@ -490,7 +492,7 @@ function displayEmailResult(result) {
                     <span style="font-weight:bold; font-size: 13px; color: ${c.urlScore >= 50 ? '#ff6b6b' : '#4caf50'};">${c.urlScore || 0}/100</span>
                 </div>
                 
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
+                <div style="d${c.aiFingerprintScore > 0 ? c.aiFingerprintScore + '/100' : 'No Patterns'}isplay:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
                     <span style="font-size: 13px;">🕸️ Behavioral Intent:</span>
                     <span style="font-weight:bold; font-size: 13px; color: ${c.behaviorScore >= 30 ? '#ff6b6b' : '#4caf50'};">${c.behaviorScore || 0}/100</span>
                 </div>
@@ -504,6 +506,13 @@ function displayEmailResult(result) {
                     <span style="font-size: 13px;">📎 Attachment Analysis:</span>
                     <span style="font-weight:bold; font-size: 13px; color: ${c.attachmentScore >= 30 ? '#ff6b6b' : (c.attachmentScore > 0 ? '#ffb347' : '#888')};">${c.attachmentScore > 0 ? c.attachmentScore + '/100' : 'No Attachment'}</span>
                 </div>
+                
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
+    <span style="font-size: 13px;">🤖 AI Pattern (LLM):</span>
+    <span style="font-weight:bold; font-size: 13px; color: ${c.aiFingerprintScore >= 50 ? '#ff6b6b' : (c.aiFingerprintScore > 0 ? '#ffb347' : '#888')};">
+        ${(c.aiFingerprintScore !== undefined && c.aiFingerprintScore !== null) ? c.aiFingerprintScore + '/100' : 'No Patterns'}
+    </span>
+</div>
             </div>
         `;
     }
@@ -541,10 +550,9 @@ function displayEmailResult(result) {
             <div class="detail-item" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px; margin-top: 15px;">
                 <p style="font-size: 11px; opacity: 0.8; font-style: italic;">${result.analysis || 'Analysis complete.'}</p>
             </div>
-
             <div style="margin-top: 15px; text-align: center;">
-                <button id="viewEmailReportBtn" class="action-btn" style="width: 100%; padding: 10px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; cursor: pointer; border-radius: 8px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s ease;">
-                    📊 View Detailed Email Report
+                <button id="viewEmailFeaturesBtn" class="action-btn" style="width: 100%; padding: 10px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; cursor: pointer; border-radius: 8px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s ease;">
+                    📊 View Detailed Email Analysis
                 </button>
             </div>
         </div>
@@ -552,16 +560,14 @@ function displayEmailResult(result) {
 
     resultDiv.classList.remove('hidden');
 
-    // Attach listener for the new button
-    const btn = document.getElementById('viewEmailReportBtn');
+    // Add listener for the new button
+    const btn = document.getElementById('viewEmailFeaturesBtn');
     if (btn) {
         btn.addEventListener('click', () => {
             chrome.storage.local.set({ lastEmailAnalysis: result }, () => {
                 chrome.tabs.create({ url: 'index.html?page=email_report' });
             });
         });
-
-        // Add hover effect via JS since it's an inline style
         btn.onmouseover = () => btn.style.background = 'rgba(255,255,255,0.2)';
         btn.onmouseout = () => btn.style.background = 'rgba(255,255,255,0.1)';
     }

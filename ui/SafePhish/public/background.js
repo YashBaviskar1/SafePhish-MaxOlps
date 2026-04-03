@@ -59,12 +59,13 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
         const selectedText = info.selectionText || '';
         // If on email platform, treat selected text as email body
         if (isEmailPlatformUrl(tab.url)) {
-            // Also try to get the subject from the page
-            chrome.tabs.sendMessage(tab.id, { action: 'extractEmailSubjectOnly' }, (subjectResponse) => {
-                const subject = (subjectResponse && subjectResponse.subject) ? subjectResponse.subject : 'Unknown Subject';
+            // Also try to get the subject and sender from the page
+            chrome.tabs.sendMessage(tab.id, { action: 'extractEmailSubjectOnly' }, (metaResponse) => {
+                const subject = (metaResponse && metaResponse.subject) ? metaResponse.subject : 'Unknown Subject';
+                const sender = (metaResponse && metaResponse.sender) ? metaResponse.sender : '';
                 contextData = {
                     type: 'email',
-                    content: `Subject: ${subject}\n\n${selectedText}`
+                    content: `From: ${sender}\nSubject: ${subject}\n\n${selectedText}`
                 };
                 try { chrome.action.openPopup(); } catch (e) { }
             });
@@ -106,7 +107,7 @@ function _storeEmailContextAndOpen(emailData, tabUrl) {
     if (emailData && (emailData.subject || emailData.body)) {
         contextData = {
             type: 'email',
-            content: `Subject: ${emailData.subject || 'Unknown Subject'}\n\n${emailData.body || ''}`
+            content: `From: ${emailData.sender || ''}\nSubject: ${emailData.subject || 'Unknown Subject'}\n\n${emailData.body || ''}`
         };
     } else {
         // Store a signal so popup knows to try extraction itself
@@ -124,7 +125,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         // Store data from double-click extraction
         contextData = {
             type: 'email',
-            content: `Subject: ${request.data.subject}\n\n${request.data.body}`
+            content: `From: ${request.data.sender || ''}\nSubject: ${request.data.subject}\n\n${request.data.body}`
         };
         sendResponse({ success: true });
     } else if (request.action === 'getContextData') {
@@ -139,7 +140,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         });
         return true; // Indicates async response
     } else if (request.action === 'scanEmail') {
-        performEmailScan(request.content, request.type, request.attachmentScore || 0, request.sender || "").then(result => {
+        performEmailScan(request.content, request.type, request.attachmentScore || 0, request.sender || "", request.enableAIDetection || false).then(result => {
             sendResponse(result);
         }).catch(error => {
             sendResponse({ error: error.message });
@@ -234,8 +235,12 @@ async function _analyzeEmailUrls(emailContent) {
     const urlRegex = /(https?:\/\/|ftp:\/\/)[^\s<>"{}|\\^`\[\]]+/gi;
     const urls = emailContent.match(urlRegex) || [];
 
+    // Normalize URLs (remove trailing slashes) before deduplication
+    // This prevents the same URL appearing twice with/without trailing slash
+    const normalizedUrls = urls.map(url => url.replace(/\/+$/, ''));
+    
     // Remove duplicates and limit to 5
-    const uniqueUrls = [...new Set(urls)];
+    const uniqueUrls = [...new Set(normalizedUrls)];
     const urlsToScan = uniqueUrls.slice(0, 5);
 
     if (urlsToScan.length === 0) {
@@ -285,7 +290,7 @@ async function _analyzeEmailUrls(emailContent) {
 }
 
 // ── ML-Powered Email Scan ─────────────────────────────────────────────────────
-async function performEmailScan(emailContent, type, attachmentScore = 0, providedSender = "") {
+async function performEmailScan(emailContent, type, attachmentScore = 0, providedSender = "", enableAIDetection = false) {
     // Parse subject and body from the combined string
     let subject = '';
     let body = emailContent;
@@ -323,7 +328,8 @@ async function performEmailScan(emailContent, type, attachmentScore = 0, provide
                 body: body,
                 urls: urlsToPass,
                 url_score: maxUrlScore,
-                attachment_score: attachmentScore
+                attachment_score: attachmentScore,
+                enable_ai_detection: enableAIDetection
             })
         });
 
@@ -356,13 +362,8 @@ async function performEmailScan(emailContent, type, attachmentScore = 0, provide
         components: emailAnalysis.components || {}
     };
 
-if (urlAnalysis) {
-        resultToReturn.urls = [
-            ...urlAnalysis.phishingUrls.map(u => ({ url: u.url, score: u.confidence, verdict: u.mlLabel || 'PHISHING' })),
-            ...urlAnalysis.legitimateUrls.map(u => ({ url: u.url, score: u.confidence, verdict: u.mlLabel || 'LEGITIMATE' }))
-        ];
-    } else {
-        resultToReturn.urls = [];
+    if (urlAnalysis) {
+        resultToReturn.urls = urlAnalysis;
     }
 
     return resultToReturn;
