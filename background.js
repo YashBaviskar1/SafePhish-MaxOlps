@@ -183,7 +183,7 @@ async function performUrlScan(url) {
             .map(([k]) => k);
 
         const analysisText = result.isPhishing
-            ? `⚠️ ML model detected phishing patterns. Suspicious indicators: ${phishingFeatures.join(', ') || 'general URL structure'}. Do not enter credentials on this page.`
+            ? `⚠️ ML model detected phishing patterns. Suspicious indicators: ${phishingFeatures.length > 0 ? phishingFeatures.join(', ') : 'general URL structure'}.`
             : `✅ ML model classified this URL as legitimate (${result.phishingProbability}% phishing probability). Always verify the domain before sharing sensitive data.`;
 
         // Prefer the server-computed Python features (full 30-feature set with real WHOIS/DNS/Google data).
