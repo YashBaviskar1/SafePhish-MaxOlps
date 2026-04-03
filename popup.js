@@ -196,7 +196,7 @@ async function triggerDeceptiveScan() {
 
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab) {
-        setDeceptiveBtnsState(false, '🕵️ Scan Page');
+        setDeceptiveBtnsState(false, 'Scan Page');
         return;
     }
 
@@ -222,7 +222,7 @@ async function triggerDeceptiveScan() {
                         'For local files, go to chrome://extensions → Details and enable "Allow access to file URLs".' :
                         'The extension could not access this page.')
             });
-            setDeceptiveBtnsState(false, '🕵️ Scan Page');
+            setDeceptiveBtnsState(false, 'Scan Page');
             return;
         }
     }
@@ -241,7 +241,7 @@ async function triggerDeceptiveScan() {
         }, 1200);
     }
 
-    setDeceptiveBtnsState(false, '🕵️ Scan Page');
+    setDeceptiveBtnsState(false, 'Scan Page');
 }
 
 function showDeceptiveResult(result) {
@@ -356,9 +356,7 @@ function displayUrlResult(result) {
     const riskLevel = result.isPhishing ? 'PHISHING' : 'LEGITIMATE';
     const riskColor = result.isPhishing ? 'risk-high' : 'risk-safe';
 
-    const mlBadge = result.phishingProb !== null
-        ? `<span style="font-size:11px;background:rgba(255,255,255,0.2);padding:2px 8px;border-radius:12px;margin-left:8px;">🤖 ML Model</span>`
-        : `<span style="font-size:11px;background:rgba(255,255,255,0.15);padding:2px 8px;border-radius:12px;margin-left:8px;">📐 Rule-based</span>`;
+    const mlBadge = '';
 
     const probLine = result.phishingProb !== null
         ? `<div class="detail-item"><strong>Phishing Probability:</strong><p>${result.phishingProb}%</p></div>`
@@ -380,8 +378,19 @@ function displayUrlResult(result) {
                 <p>${result.isPhishing ? '⚠️ Potential Phishing' : '✅ Legitimate'}</p>
             </div>
             <div class="detail-item">
-                <strong>Analysis:</strong>
-                <p>${result.analysis || 'No additional details available'}</p>
+                <strong>Explainability:</strong>
+                <p id="explainabilityText">${(function() {
+                    if (result.topFeatures && result.topFeatures.length > 0) {
+                        const top4 = result.topFeatures.slice(0, 4);
+                        const featureList = top4.map(f => {
+                            const isRisky = f.score < 0; // Negative score = Phishing impact
+                            const icon = isRisky ? '🚨' : '🛡️';
+                            return `${icon} ${f.feature}`;
+                        }).join(', ');
+                        return `Key Factors: ${featureList}. These indicators most influenced the ${result.isPhishing ? 'PHISHING' : 'LEGITIMATE'} verdict.`;
+                    }
+                    return result.analysis || 'No additional details available';
+                })()}</p>
             </div>
             <div style="margin-top: 15px; text-align: center;">
                 <button id="viewFeaturesBtn" class="action-btn" style="width: 100%; padding: 10px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; cursor: pointer; border-radius: 8px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s ease;">
@@ -426,9 +435,7 @@ function displayEmailResult(result) {
     const riskLevel = result.isPhishing ? 'PHISHING' : 'LEGITIMATE';
     const riskColor = result.isPhishing ? 'risk-high' : 'risk-safe';
 
-    const mlBadge = result.phishingProb !== null
-        ? `<span style="font-size:11px;background:rgba(255,255,255,0.2);padding:2px 8px;border-radius:12px;margin-left:8px;">🤖 ML Model</span>`
-        : `<span style="font-size:11px;background:rgba(255,255,255,0.15);padding:2px 8px;border-radius:12px;margin-left:8px;">📐 Rule-based</span>`;
+    const mlBadge = '';
 
     const probLine = result.phishingProb !== null
         ? `<div class="detail-item"><strong>Phishing Probability:</strong><p>${result.phishingProb}%</p></div>`
@@ -488,37 +495,37 @@ function displayEmailResult(result) {
     if (result.components) {
         const c = result.components;
         componentsSection = `
-            <div class="detail-item" style="background: rgba(0,0,0,0.05); padding: 12px; border-radius: 8px; margin-top: 10px;">
-                <strong style="display:block; margin-bottom: 8px; font-size: 14px;">📊 5-Engine Master Breakdown</strong>
+            <div class="detail-item" style="background: rgba(0,0,0,0.05); padding: 8px; border-radius: 8px; margin-top: 8px;">
+                <strong style="display:block; margin-bottom: 6px; font-size: 13px;">📊 5-Engine Master Breakdown</strong>
                 
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
-                    <span style="font-size: 13px;">📧 Email Content (ML Score):</span>
-                    <span style="font-weight:bold; font-size: 13px; color: ${c.mlContentScore >= 50 ? '#ff6b6b' : '#4caf50'};">${c.mlContentScore}/100</span>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 2px;">
+                    <span style="font-size: 12px;">📧 Email Content:</span>
+                    <span style="font-weight:bold; font-size: 12px; color: ${c.mlContentScore >= 50 ? '#ff6b6b' : '#4caf50'};">${c.mlContentScore}/100</span>
                 </div>
                 
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
-                    <span style="font-size: 13px;">🔗 URL Risk (ML Score):</span>
-                    <span style="font-weight:bold; font-size: 13px; color: ${c.urlScore >= 50 ? '#ff6b6b' : '#4caf50'};">${c.urlScore || 0}/100</span>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 2px;">
+                    <span style="font-size: 12px;">🔗 URL Risk:</span>
+                    <span style="font-weight:bold; font-size: 12px; color: ${c.urlScore >= 50 ? '#ff6b6b' : '#4caf50'};">${c.urlScore || 0}/100</span>
                 </div>
                 
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
-                    <span style="font-size: 13px;">🕸️ Behavioral Intent:</span>
-                    <span style="font-weight:bold; font-size: 13px; color: ${c.behaviorScore >= 30 ? '#ff6b6b' : '#4caf50'};">${c.behaviorScore || 0}/100</span>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 2px;">
+                    <span style="font-size: 12px;">🕸️ Behavioral:</span>
+                    <span style="font-weight:bold; font-size: 12px; color: ${c.behaviorScore >= 30 ? '#ff6b6b' : '#4caf50'};">${c.behaviorScore || 0}/100</span>
                 </div>
                 
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
-                    <span style="font-size: 13px;">🕵️ Contextual Anomalies:</span>
-                    <span style="font-weight:bold; font-size: 13px; color: ${c.contextScore >= 30 ? '#ff6b6b' : '#4caf50'};">${c.contextScore || 0}/100</span>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 2px;">
+                    <span style="font-size: 12px;">🕵️ Contextual:</span>
+                    <span style="font-weight:bold; font-size: 12px; color: ${c.contextScore >= 30 ? '#ff6b6b' : '#4caf50'};">${c.contextScore || 0}/100</span>
                 </div>
                 
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
-                    <span style="font-size: 13px;">📎 Attachment Analysis:</span>
-                    <span style="font-weight:bold; font-size: 13px; color: ${c.attachmentScore >= 30 ? '#ff6b6b' : (c.attachmentScore > 0 ? '#ffb347' : '#888')};">${c.attachmentScore > 0 ? c.attachmentScore + '/100' : 'No Attachment'}</span>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 2px;">
+                    <span style="font-size: 12px;">📎 Attachments:</span>
+                    <span style="font-weight:bold; font-size: 12px; color: ${c.attachmentScore >= 30 ? '#ff6b6b' : (c.attachmentScore > 0 ? '#ffb347' : '#888')};">${c.attachmentScore > 0 ? c.attachmentScore + '/100' : 'None'}</span>
                 </div>
                 
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
-                    <span style="font-size: 13px;">🤖 AI Pattern (LLM):</span>
-                    <span style="font-weight:bold; font-size: 13px; color: ${c.aiFingerprintScore >= 50 ? '#ff6b6b' : (c.aiFingerprintScore > 0 ? '#ffb347' : '#888')};">${c.aiFingerprintScore > 0 ? c.aiFingerprintScore + '/100' : 'No Patterns'}</span>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 2px;">
+                    <span style="font-size: 12px;">🤖 AI Pattern (LLM):</span>
+                    <span style="font-weight:bold; font-size: 12px; color: ${c.aiFingerprintScore >= 50 ? '#ff6b6b' : (c.aiFingerprintScore > 0 ? '#ffb347' : '#888')};">${c.aiFingerprintScore > 0 ? c.aiFingerprintScore + '/100' : 'None'}</span>
                 </div>
             </div>
         `;
@@ -528,9 +535,9 @@ function displayEmailResult(result) {
     if (result.findings && result.findings.length > 0) {
         let findingsList = result.findings.map(f => `<li style="margin-bottom: 4px; font-size: 12px; line-height: 1.4;">${escapeHtml(f)}</li>`).join('');
         findingsSection = `
-            <div class="detail-item">
-                <strong style="margin-bottom: 6px; display:block;">🔍 Explainability Findings:</strong>
-                <ul style="padding-left: 20px; margin: 0; color: #ddd;">
+            <div class="detail-item" style="padding-bottom: 8px; margin-bottom: 8px;">
+                <strong style="margin-bottom: 4px; display:block; font-size: 12px;">🔍 Explainability Findings:</strong>
+                <ul style="padding-left: 18px; margin: 0; color: #ddd;">
                     ${findingsList}
                 </ul>
             </div>
@@ -545,9 +552,9 @@ function displayEmailResult(result) {
         <div class="result-details">
             ${componentsSection}
             
-            <div class="detail-item" style="margin-top: 15px;">
+            <div class="detail-item" style="margin-top: 10px; padding-bottom: 8px; margin-bottom: 8px;">
                 <strong>Verdict:</strong>
-                <p style="font-size: 13px;">${result.isPhishing ? '⚠️ Potential Phishing via 5-Engine Analysis' : '✅ Looks Safe across all components'}</p>
+                <p style="font-size: 12px;">${result.isPhishing ? '⚠️ Potential Phishing via 5-Engine Analysis' : '✅ Looks Safe across all components'}</p>
             </div>
             
             ${urlSection}
