@@ -47,6 +47,7 @@ async function extractEmailFromTab(tabId) {
 // ─── Populate email fields from extracted data ───
 function populateEmailFields(emailData) {
     if (!emailData) return;
+    document.getElementById('emailSender').value  = emailData.sender  || '';
     document.getElementById('emailSubject').value = emailData.subject || '';
     document.getElementById('emailBody').value    = emailData.body    || '';
 }
@@ -85,6 +86,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // ── B. Have ready-made email content (right-click page scan / double-click) ──
         if (response && response.type === 'email' && response.content) {
+            // Check if there's a From: line
+            const match = response.content.match(/^From:\s*(.+)/m);
+            if (match) {
+                document.getElementById('emailSender').value = match[1].trim();
+            }
             if (response.content.startsWith('Subject:')) {
                 const parts = response.content.split('\n\n');
                 document.getElementById('emailSubject').value = parts[0].replace('Subject:', '').trim();
@@ -259,6 +265,16 @@ function showDeceptiveResult(result) {
     div.classList.remove('hidden');
 }
 
+// ── Scan Page: detect hidden/deceptive clickable elements ──────────────────
+function setDeceptiveBtnsState(disabled, text) {
+    ['scanDeceptiveBtn', 'scanDeceptiveBtnEmail'].forEach(id => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        btn.disabled = disabled;
+        btn.textContent = text;
+    });
+}
+
 // URL Scanner
 document.getElementById('scanUrlBtn').addEventListener('click', scanUrl);
 
@@ -304,10 +320,12 @@ async function scanEmail() {
 
     try {
         const emailContent = `Subject: ${emailSubject}\n\n${emailBody}`;
+        const emailSender = document.getElementById('emailSender').value.trim();
 
         const result = await chrome.runtime.sendMessage({
             action: 'scanEmail',
             content: emailContent,
+            sender: emailSender,
             type: 'text'
         });
 
@@ -455,25 +473,73 @@ function displayEmailResult(result) {
         `;
     }
 
+    let componentsSection = '';
+    if (result.components) {
+        const c = result.components;
+        componentsSection = `
+            <div class="detail-item" style="background: rgba(0,0,0,0.05); padding: 12px; border-radius: 8px; margin-top: 10px;">
+                <strong style="display:block; margin-bottom: 8px; font-size: 14px;">📊 5-Engine Master Breakdown</strong>
+                
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
+                    <span style="font-size: 13px;">📧 Email Content (ML Score):</span>
+                    <span style="font-weight:bold; font-size: 13px; color: ${c.mlContentScore >= 50 ? '#ff6b6b' : '#4caf50'};">${c.mlContentScore}/100</span>
+                </div>
+                
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
+                    <span style="font-size: 13px;">🔗 URL Risk (ML Score):</span>
+                    <span style="font-weight:bold; font-size: 13px; color: ${c.urlScore >= 50 ? '#ff6b6b' : '#4caf50'};">${c.urlScore || 0}/100</span>
+                </div>
+                
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
+                    <span style="font-size: 13px;">🕸️ Behavioral Intent:</span>
+                    <span style="font-weight:bold; font-size: 13px; color: ${c.behaviorScore >= 30 ? '#ff6b6b' : '#4caf50'};">${c.behaviorScore || 0}/100</span>
+                </div>
+                
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
+                    <span style="font-size: 13px;">🕵️ Contextual Anomalies:</span>
+                    <span style="font-weight:bold; font-size: 13px; color: ${c.contextScore >= 30 ? '#ff6b6b' : '#4caf50'};">${c.contextScore || 0}/100</span>
+                </div>
+                
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
+                    <span style="font-size: 13px;">📎 Attachment Analysis:</span>
+                    <span style="font-weight:bold; font-size: 13px; color: ${c.attachmentScore >= 30 ? '#ff6b6b' : (c.attachmentScore > 0 ? '#ffb347' : '#888')};">${c.attachmentScore > 0 ? c.attachmentScore + '/100' : 'No Attachment'}</span>
+                </div>
+            </div>
+        `;
+    }
+
+    let findingsSection = '';
+    if (result.findings && result.findings.length > 0) {
+        let findingsList = result.findings.map(f => `<li style="margin-bottom: 4px; font-size: 12px; line-height: 1.4;">${escapeHtml(f)}</li>`).join('');
+        findingsSection = `
+            <div class="detail-item">
+                <strong style="margin-bottom: 6px; display:block;">🔍 Explainability Findings:</strong>
+                <ul style="padding-left: 20px; margin: 0; color: #ddd;">
+                    ${findingsList}
+                </ul>
+            </div>
+        `;
+    }
+
     contentDiv.innerHTML = `
         <div class="result-header ${riskColor}">
             <h3>${riskLevel}${mlBadge}</h3>
-            <p>Confidence: ${result.confidence}%</p>
+            <p>Total Master Risk Score: ${result.confidence}/100</p>
         </div>
         <div class="result-details">
-            ${probLine}
-            <div class="detail-item">
-                <strong>Status:</strong>
-                <p>${result.isPhishing ? '⚠️ Potential Phishing' : '✅ Legitimate'}</p>
+            ${componentsSection}
+            
+            <div class="detail-item" style="margin-top: 15px;">
+                <strong>Verdict:</strong>
+                <p style="font-size: 13px;">${result.isPhishing ? '⚠️ Potential Phishing via 5-Engine Analysis' : '✅ Looks Safe across all components'}</p>
             </div>
+            
             ${urlSection}
-            <div class="detail-item">
-                <strong>Suspicious Elements Found:</strong>
-                <p>${result.suspiciousElements || 'None'}</p>
-            </div>
-            <div class="detail-item">
-                <strong>Analysis:</strong>
-                <p>${result.analysis || 'No additional details available'}</p>
+            
+            ${findingsSection}
+            
+            <div class="detail-item" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px; margin-top: 15px;">
+                <p style="font-size: 11px; opacity: 0.8; font-style: italic;">${result.analysis || 'Analysis complete.'}</p>
             </div>
         </div>
     `;
@@ -536,3 +602,411 @@ function escapeHtml(text) {
     div.textContent = text;
     return div.innerHTML;
 }
+
+// ── Attachment Analysis ──────────────────────────────────────────────────────
+
+let selectedFile = null;
+let selectedBase64 = null; // For auto-fetched files
+let selectedFileName = null; // For auto-fetched files
+
+// Wire up attachment UI on load
+document.addEventListener('DOMContentLoaded', () => {
+    const dropZone = document.getElementById('attachmentDropZone');
+    const fileInput = document.getElementById('attachmentFileInput');
+    const scanBtn = document.getElementById('scanAttachmentBtn');
+    const clearBtn = document.getElementById('clearFileBtn');
+    const autoFetchBtn = document.getElementById('autoFetchBtn');
+    const vtToggle = document.getElementById('vtToggle');
+
+    if (!dropZone) return;
+
+    // Click drop zone to open file picker
+    dropZone.addEventListener('click', () => fileInput.click());
+
+    // Drag events
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('drag-active');
+    });
+    dropZone.addEventListener('dragleave', () => {
+        dropZone.classList.remove('drag-active');
+    });
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('drag-active');
+        if (e.dataTransfer.files.length > 0) {
+            selectFile(e.dataTransfer.files[0]);
+        }
+    });
+
+    // File input change
+    fileInput.addEventListener('change', () => {
+        if (fileInput.files.length > 0) {
+            selectFile(fileInput.files[0]);
+        }
+    });
+
+    // Clear button
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            selectedFile = null;
+            selectedBase64 = null;
+            selectedFileName = null;
+            document.getElementById('selectedFileInfo').classList.add('hidden');
+            scanBtn.disabled = true;
+            document.getElementById('attachmentResult').classList.add('hidden');
+        });
+    }
+
+    // Scan button
+    if (scanBtn) {
+        scanBtn.addEventListener('click', scanAttachment);
+    }
+
+    // Auto-fetch button
+    if (autoFetchBtn) {
+        autoFetchBtn.addEventListener('click', autoFetchAttachment);
+    }
+
+    // VT Toggle
+    if (vtToggle) {
+        vtToggle.addEventListener('change', () => {
+            const label = document.getElementById('vtToggleLabel');
+            const loadingText = document.getElementById('loadingLayerText');
+            if (vtToggle.checked) {
+                label.textContent = 'Sandbox + VT';
+                if (loadingText) loadingText.textContent = 'Docker Sandbox → VirusTotal Hash → Detonation';
+            } else {
+                label.textContent = 'Sandbox Only';
+                if (loadingText) loadingText.textContent = 'Docker Sandbox Analysis';
+            }
+        });
+    }
+
+    // Try to detect attachments from the current email
+    detectAttachmentsFromPage();
+});
+
+function selectFile(file) {
+    selectedFile = file;
+    selectedBase64 = null; // Clear any auto-fetched data
+    selectedFileName = null;
+    const info = document.getElementById('selectedFileInfo');
+    const nameEl = document.getElementById('selectedFileName');
+    const scanBtn = document.getElementById('scanAttachmentBtn');
+
+    nameEl.textContent = `📄 ${file.name} (${formatBytes(file.size)})`;
+    info.classList.remove('hidden');
+    scanBtn.disabled = false;
+}
+
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+async function detectAttachmentsFromPage() {
+    try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tab) return;
+
+        const response = await chrome.tabs.sendMessage(tab.id, { action: 'extractAttachmentInfo' });
+        if (response && response.hasAttachments && response.attachments.length > 0) {
+            const infoDiv = document.getElementById('attachmentInfo');
+            const listDiv = document.getElementById('attachmentList');
+            const autoFetchBtn = document.getElementById('autoFetchBtn');
+            infoDiv.classList.remove('hidden');
+
+            listDiv.innerHTML = response.attachments.map((att, i) =>
+                `<div class="attachment-chip" data-index="${i}">
+                    <span class="chip-icon">${getFileIcon(att.type)}</span>
+                    <span class="chip-name">${escapeHtml(att.name)}</span>
+                    ${att.size !== 'unknown' ? `<span class="chip-size">${att.size}</span>` : ''}
+                </div>`
+            ).join('');
+
+            // Show auto-fetch button
+            if (autoFetchBtn) {
+                autoFetchBtn.classList.remove('hidden');
+                autoFetchBtn.textContent = response.attachments.length === 1
+                    ? `⬇️ Auto-Fetch: ${response.attachments[0].name}`
+                    : `⬇️ Auto-Fetch ${response.attachments.length} Attachments`;
+            }
+
+            // Make individual chips clickable for single fetch
+            listDiv.querySelectorAll('.attachment-chip').forEach(chip => {
+                chip.style.cursor = 'pointer';
+                chip.addEventListener('click', () => autoFetchAttachment(parseInt(chip.dataset.index)));
+            });
+        }
+    } catch (e) {
+        // Content script may not be available — ignore
+    }
+}
+
+function getFileIcon(mimeType) {
+    if (mimeType.includes('pdf')) return '📕';
+    if (mimeType.includes('word') || mimeType.includes('msword')) return '📘';
+    if (mimeType.includes('excel') || mimeType.includes('spreadsheet')) return '📗';
+    if (mimeType.includes('powerpoint') || mimeType.includes('presentation')) return '📙';
+    if (mimeType.includes('zip') || mimeType.includes('rar') || mimeType.includes('compressed')) return '📦';
+    if (mimeType.includes('executable') || mimeType.includes('x-dosexec')) return '⚠️';
+    if (mimeType.includes('image')) return '🖼️';
+    if (mimeType.includes('javascript') || mimeType.includes('vbscript')) return '⚠️';
+    return '📎';
+}
+
+async function autoFetchAttachment(index = 0) {
+    const fetchStatus = document.getElementById('fetchStatus');
+    const scanBtn = document.getElementById('scanAttachmentBtn');
+    const autoFetchBtn = document.getElementById('autoFetchBtn');
+
+    fetchStatus.classList.remove('hidden');
+    fetchStatus.innerHTML = '<p class="fetch-progress">⏳ Fetching attachment from email…</p>';
+    if (autoFetchBtn) {
+        autoFetchBtn.disabled = true;
+        autoFetchBtn.textContent = '⏳ Fetching…';
+    }
+
+    try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tab) throw new Error('No active tab');
+
+        // Send fetch request to content script
+        let result;
+        try {
+            result = await chrome.tabs.sendMessage(tab.id, {
+                action: 'fetchAttachmentData',
+                index: index
+            });
+        } catch (_) {
+            // Content script not loaded — inject and retry
+            await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content.js'] });
+            await new Promise(r => setTimeout(r, 400));
+            result = await chrome.tabs.sendMessage(tab.id, {
+                action: 'fetchAttachmentData',
+                index: index
+            });
+        }
+
+        if (result && result.success) {
+            selectedBase64 = result.base64;
+            selectedFileName = result.filename;
+            selectedFile = null; // Clear any manual file
+
+            const info = document.getElementById('selectedFileInfo');
+            const nameEl = document.getElementById('selectedFileName');
+            nameEl.textContent = `📄 ${result.filename} (${formatBytes(result.size)}) — auto-fetched`;
+            info.classList.remove('hidden');
+            scanBtn.disabled = false;
+
+            fetchStatus.innerHTML = `<p class="fetch-success">✅ Fetched: ${escapeHtml(result.filename)}</p>`;
+        } else {
+            const errMsg = result?.error || 'Unknown error';
+            fetchStatus.innerHTML = `<p class="fetch-error">❌ ${escapeHtml(errMsg)}</p>`;
+        }
+    } catch (e) {
+        fetchStatus.innerHTML = `<p class="fetch-error">❌ Could not fetch: ${escapeHtml(e.message)}</p>`;
+    } finally {
+        if (autoFetchBtn) {
+            autoFetchBtn.disabled = false;
+            autoFetchBtn.textContent = '⬇️ Auto-Fetch Attachment from Email';
+        }
+    }
+}
+
+async function scanAttachment() {
+    if (!selectedFile && !selectedBase64) return;
+
+    const scanBtn = document.getElementById('scanAttachmentBtn');
+    const loadingDiv = document.getElementById('attachmentLoading');
+    const resultDiv = document.getElementById('attachmentResult');
+    const vtToggle = document.getElementById('vtToggle');
+    const skipVT = vtToggle ? !vtToggle.checked : false;
+
+    scanBtn.disabled = true;
+    scanBtn.textContent = '🔬 Analyzing…';
+    loadingDiv.classList.remove('hidden');
+    resultDiv.classList.add('hidden');
+
+    try {
+        let base64;
+        let fileName;
+
+        if (selectedBase64) {
+            // Auto-fetched data already available as base64
+            base64 = selectedBase64;
+            fileName = selectedFileName || 'attachment';
+        } else {
+            // Read file from file input as base64
+            base64 = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const dataUrl = reader.result;
+                    const base64Part = dataUrl.split(',')[1];
+                    resolve(base64Part);
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(selectedFile);
+            });
+            fileName = selectedFile.name;
+        }
+
+        // Send to background for analysis
+        const result = await chrome.runtime.sendMessage({
+            action: 'scanAttachment',
+            fileData: base64,
+            fileName: fileName,
+            skipVT: skipVT
+        });
+
+        displayAttachmentResult(result);
+
+    } catch (error) {
+        console.error('Error scanning attachment:', error);
+        displayAttachmentError('Attachment scan failed. Is the ML server running?');
+    } finally {
+        loadingDiv.classList.add('hidden');
+        scanBtn.disabled = false;
+        scanBtn.textContent = '🔬 Scan Attachment';
+    }
+}
+
+function displayAttachmentResult(result) {
+    const resultDiv = document.getElementById('attachmentResult');
+    const contentDiv = document.getElementById('attachmentResultContent');
+
+    if (result.error && result.label === 'ERROR') {
+        contentDiv.innerHTML = `
+            <div class="result-header risk-error">
+                <h3>⚠️ Analysis Error</h3>
+                <p>${escapeHtml(result.error)}</p>
+            </div>`;
+        resultDiv.classList.remove('hidden');
+        return;
+    }
+
+    const riskColor = result.riskScore >= 60 ? 'risk-high' :
+                      result.riskScore >= 30 ? 'risk-medium' : 'risk-safe';
+    const riskEmoji = result.riskScore >= 60 ? '🚨' :
+                      result.riskScore >= 30 ? '⚠️' : '✅';
+
+    // Build findings HTML
+    const findingsHtml = result.findings && result.findings.length > 0
+        ? result.findings.map(f => {
+            let icon = '🔍';
+            let cls = 'finding-info';
+            if (f.startsWith('[Sandbox]')) { icon = '🐳'; cls = 'finding-sandbox'; }
+            else if (f.startsWith('[VirusTotal]')) { icon = '🛡️'; cls = 'finding-vt'; }
+            else if (f.startsWith('[VT Detonation]')) { icon = '💥'; cls = 'finding-det'; }
+            return `<div class="finding-item ${cls}">${icon} ${escapeHtml(f)}</div>`;
+        }).join('')
+        : '<div class="finding-item finding-info">✅ No suspicious indicators found</div>';
+
+    // Build layer status badges
+    const sandbox = result.layers?.sandbox || {};
+    const vtHash = result.layers?.virusTotalHash || {};
+    const vtDet = result.layers?.virusTotalDetonation;
+
+    const sandboxBadge = `<div class="layer-badge layer-sandbox">
+        <span class="layer-name">🐳 Docker Sandbox</span>
+        <span class="layer-score">Risk: ${sandbox.riskScore ?? '?'}/100</span>
+    </div>`;
+
+    let vtHashBadge = '';
+    if (vtHash.found) {
+        const m = vtHash.malicious || 0;
+        const t = vtHash.total || 0;
+        vtHashBadge = `<div class="layer-badge ${m > 0 ? 'layer-danger' : 'layer-clean'}">
+            <span class="layer-name">🛡️ VT Hash Lookup</span>
+            <span class="layer-score">${m}/${t} flagged</span>
+        </div>`;
+    } else if (vtHash.available === false) {
+        vtHashBadge = `<div class="layer-badge layer-skip">
+            <span class="layer-name">🛡️ VT Hash Lookup</span>
+            <span class="layer-score">${vtHash.reason || 'Unavailable'}</span>
+        </div>`;
+    } else {
+        vtHashBadge = `<div class="layer-badge layer-unknown">
+            <span class="layer-name">🛡️ VT Hash Lookup</span>
+            <span class="layer-score">Hash not found</span>
+        </div>`;
+    }
+
+    let vtDetBadge = '';
+    if (vtDet) {
+        if (vtDet.completed) {
+            const dm = vtDet.malicious || 0;
+            vtDetBadge = `<div class="layer-badge ${dm > 0 ? 'layer-danger' : 'layer-clean'}">
+                <span class="layer-name">💥 VT Detonation</span>
+                <span class="layer-score">${dm}/${vtDet.total || 0} flagged</span>
+            </div>`;
+        } else {
+            vtDetBadge = `<div class="layer-badge layer-pending">
+                <span class="layer-name">💥 VT Detonation</span>
+                <span class="layer-score">Pending</span>
+            </div>`;
+        }
+    } else {
+        vtDetBadge = `<div class="layer-badge layer-skip">
+            <span class="layer-name">💥 VT Detonation</span>
+            <span class="layer-score">Skipped</span>
+        </div>`;
+    }
+
+    contentDiv.innerHTML = `
+        <div class="result-header ${riskColor}">
+            <h3>${riskEmoji} ${result.label}</h3>
+            <p>Risk Score: ${result.riskScore}/100</p>
+        </div>
+        <div class="result-details">
+            <div class="detail-item">
+                <strong>File:</strong>
+                <p>${escapeHtml(result.filename || 'unknown')}</p>
+            </div>
+            <div class="detail-item">
+                <strong>Type:</strong>
+                <p>${escapeHtml(result.fileType || 'unknown')}</p>
+            </div>
+            <div class="detail-item">
+                <strong>SHA-256:</strong>
+                <p style="font-size:10px;word-break:break-all;font-family:monospace;">${result.hash || 'N/A'}</p>
+            </div>
+
+            <div class="layers-section">
+                <strong>Defense-in-Depth Layers:</strong>
+                <div class="layer-badges">
+                    ${sandboxBadge}
+                    ${vtHashBadge}
+                    ${vtDetBadge}
+                </div>
+            </div>
+
+            <div class="findings-section">
+                <strong>Findings & Explainability:</strong>
+                <div class="findings-list">
+                    ${findingsHtml}
+                </div>
+            </div>
+        </div>
+    `;
+
+    resultDiv.classList.remove('hidden');
+}
+
+function displayAttachmentError(message) {
+    const resultDiv = document.getElementById('attachmentResult');
+    const contentDiv = document.getElementById('attachmentResultContent');
+
+    contentDiv.innerHTML = `
+        <div class="result-header risk-error">
+            <h3>ERROR</h3>
+            <p>${message}</p>
+        </div>
+    `;
+    resultDiv.classList.remove('hidden');
+}
+

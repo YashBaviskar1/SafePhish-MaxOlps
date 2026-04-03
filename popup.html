@@ -53,6 +53,7 @@
             </div>
 
             <div class="input-section">
+                <input type="text" id="emailSender" placeholder="Sender Email (e.g. alerts@company.com)..." class="input-field">
                 <input type="text" id="emailSubject" placeholder="Email Subject..." class="input-field">
                 <textarea id="emailBody" placeholder="Email Body..." class="input-field textarea-field"></textarea>
                 <button id="scanEmailBtn" class="btn btn-primary">Scan Email</button>
@@ -64,6 +65,48 @@
 
             <div id="emailResult" class="result-section hidden">
                 <div id="emailResultContent"></div>
+            </div>
+
+            <!-- Attachment Analysis Section -->
+            <div class="attachment-section">
+                <div class="attachment-header">
+                    <h3>📎 Attachment Analysis</h3>
+                    <div class="vt-toggle-wrap">
+                        <label class="toggle-switch" title="Toggle VirusTotal integration (disable to save API calls)">
+                            <input type="checkbox" id="vtToggle" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="toggle-label" id="vtToggleLabel">Sandbox + VT</span>
+                    </div>
+                </div>
+                <div id="attachmentInfo" class="hidden">
+                    <p class="attachment-detected">📋 Detected attachments:</p>
+                    <div id="attachmentList"></div>
+                </div>
+                <button id="autoFetchBtn" class="btn btn-secondary btn-auto-fetch hidden">
+                    ⬇️ Auto-Fetch Attachment from Email
+                </button>
+                <div id="fetchStatus" class="hidden"></div>
+                <div id="attachmentDropZone" class="drop-zone">
+                    <div class="drop-zone-content">
+                        <span class="drop-icon">📁</span>
+                        <p>Drag & drop a file here</p>
+                        <p class="drop-hint">or click to browse</p>
+                    </div>
+                    <input type="file" id="attachmentFileInput" class="file-input-hidden">
+                </div>
+                <div id="selectedFileInfo" class="hidden">
+                    <span id="selectedFileName"></span>
+                    <button id="clearFileBtn" class="btn-clear">✕</button>
+                </div>
+                <button id="scanAttachmentBtn" class="btn btn-primary btn-attachment" disabled>🔬 Scan Attachment</button>
+                <div id="attachmentLoading" class="loading hidden">
+                    <p>🔬 Running layered analysis…</p>
+                    <p class="loading-detail" id="loadingLayerText">Docker Sandbox → VirusTotal Hash → Detonation</p>
+                </div>
+                <div id="attachmentResult" class="result-section hidden">
+                    <div id="attachmentResultContent"></div>
+                </div>
             </div>
 
             <div class="footer-link">

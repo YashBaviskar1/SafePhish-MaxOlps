@@ -24,6 +24,24 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return true;
     }
 
+    if (request.action === 'extractAttachmentInfo') {
+        try {
+            const attachments = extractAttachmentInfo();
+            sendResponse(attachments);
+        } catch (e) {
+            sendResponse({ hasAttachments: false, attachments: [] });
+        }
+        return true;
+    }
+
+    if (request.action === 'fetchAttachmentData') {
+        // Async: fetch the actual attachment binary from the page
+        fetchAttachmentData(request.index || 0)
+            .then(data => sendResponse(data))
+            .catch(e => sendResponse({ success: false, error: e.message }));
+        return true; // async
+    }
+
     if (request.action === 'scanDeceptiveUI') {
         try {
             const scanResult = detectDeceptiveUI();
@@ -47,13 +65,18 @@ document.addEventListener('dblclick', (event) => {
     // Or, we could just alert the user to click the extension. We'll store it.
     const emailData = extractEmailContent(event.target);
     if (emailData && (emailData.subject || emailData.body)) {
-        chrome.runtime.sendMessage({
-            action: 'storeEmailData',
-            data: emailData
-        });
-        
-        // Visual feedback to the user
-        showToast('📧 Email captured! Click the SafePhish icon to scan.');
+        try {
+            chrome.runtime.sendMessage({
+                action: 'storeEmailData',
+                data: emailData
+            });
+            
+            // Visual feedback to the user
+            showToast('📧 Email captured! Click the SafePhish icon to scan.');
+        } catch (err) {
+            console.warn('SafePhish: Could not send data to extension. Try refreshing the page.', err);
+            showToast('⚠️ Please refresh the page to reconnect SafePhish.');
+        }
     }
 });
 
@@ -68,16 +91,19 @@ function isEmailPlatform() {
 
 function extractEmailContent(targetNode = null) {
     const url = window.location.href;
+    let sender = '';
     let subject = '';
     let body = '';
     
     // Gmail
     if (url.includes('mail.google.com')) {
-        // Try to find the active message subject
+        // Try to find the active message subject and sender
+        const senderElement = document.querySelector('.gD');
         const subjectElement = document.querySelector('h2.hP');
         // Find visible message bodies
         const bodies = document.querySelectorAll('.a3s.aiL'); // Specifically targets the body within Gmail's container
         
+        sender = senderElement ? (senderElement.getAttribute('email') || senderElement.innerText) : '';
         subject = subjectElement ? subjectElement.innerText : '';
         
         if (bodies && bodies.length > 0) {
@@ -103,6 +129,7 @@ function extractEmailContent(targetNode = null) {
     } 
     // Outlook
     else if (url.includes('outlook.live.com') || url.includes('outlook.office.com')) {
+        const senderElement = document.querySelector('[data-testid="AddressBlock"] .ms-Persona-primaryText') || document.querySelector('[aria-label="Message Header"] [title*="@"]');
         const subjectElement = document.querySelector('[aria-label="Message Header"]') || 
                                document.querySelector('[data-testid="SubjectRead"]') ||
                                document.querySelector('.ms-Pivot-content');
@@ -112,6 +139,9 @@ function extractEmailContent(targetNode = null) {
                             document.querySelector('div[data-testid="ReadingPane"]') ||
                             document.querySelector('.customScrollBar');
         
+        if (senderElement) {
+            sender = senderElement.getAttribute('title') || senderElement.innerText;
+        }
         if (subjectElement) {
             subject = subjectElement.innerText.split('\n')[0];
         }
@@ -141,12 +171,37 @@ function extractEmailContent(targetNode = null) {
         body = document.body.innerText;
     }
 
+    // Append actual URLs from links so backend can scan them
+    let extractedUrls = [];
+    if (targetNode) {
+        const container = targetNode.closest('p, div, article, section') || targetNode;
+        if (container && container.querySelectorAll) {
+            container.querySelectorAll('a[href]').forEach(a => extractedUrls.push(a.href));
+        }
+    } else {
+        // Try reading pane or document body
+        const pane = document.querySelector('[role="main"]') || document.querySelector('.ii.gt') || document.body;
+        pane.querySelectorAll('a[href]').forEach(a => {
+            if (a.href.startsWith('http') && !a.href.includes('mail.google.com') && !a.href.includes('outlook.live') && !a.href.includes('outlook.office')) {
+                extractedUrls.push(a.href);
+            }
+        });
+    }
+
+    if (body) {
+        const uniqueUrls = [...new Set(extractedUrls)].filter(u => !body.includes(u));
+        if (uniqueUrls.length > 0) {
+            body += '\n\nExtracted Links:\n' + uniqueUrls.join('\n');
+        }
+    }
+
     // Limit extreme lengths
     if (body.length > 10000) {
         body = body.substring(0, 10000) + "... [truncated]";
     }
 
     return {
+        sender: sender ? sender.trim() : '',
         subject: subject ? subject.trim() : 'Unknown Subject',
         body: body ? body.trim() : ''
     };
@@ -313,6 +368,197 @@ function detectDeceptiveUI() {
     }
 
     return { count: deceptiveCount, urls: Array.from(foundUrls) };
+}
+
+// --- Attachment Detection ---
+function extractAttachmentInfo() {
+    const url = window.location.href;
+    const attachments = [];
+
+    // Gmail
+    if (url.includes('mail.google.com')) {
+        // Gmail attachment chips — each has class .aQH or parent .aZo
+        const chips = document.querySelectorAll('.aQH, .aZo .aV3');
+        chips.forEach(chip => {
+            const nameEl = chip.querySelector('.aV3') || chip;
+            const name = (nameEl.getAttribute('title') || nameEl.innerText || '').trim();
+            // Size is sometimes in a sibling span
+            const sizeEl = chip.querySelector('.aQA span') || chip.closest('.aQH')?.querySelector('.SaijPb');
+            const size = sizeEl ? sizeEl.innerText.trim() : '';
+            if (name) {
+                attachments.push({
+                    name,
+                    size: size || 'unknown',
+                    type: _guessTypeFromName(name),
+                });
+            }
+        });
+
+        // Fallback: look for download links
+        if (attachments.length === 0) {
+            const downloadLinks = document.querySelectorAll('[download_url], a[href*="mail-attachment"]');
+            downloadLinks.forEach(link => {
+                const downloadUrl = link.getAttribute('download_url') || '';
+                const parts = downloadUrl.split(':');
+                const name = parts.length > 1 ? parts[1].split(':')[0] : (link.title || link.innerText || '').trim();
+                if (name) {
+                    attachments.push({
+                        name,
+                        size: 'unknown',
+                        type: parts[0] || _guessTypeFromName(name),
+                    });
+                }
+            });
+        }
+    }
+    // Outlook
+    else if (url.includes('outlook.live.com') || url.includes('outlook.office.com')) {
+        const attachContainers = document.querySelectorAll(
+            '[data-testid="AttachmentCard"], .attachment-card, [aria-label*="attachment"], [role="listitem"][draggable="true"]'
+        );
+        attachContainers.forEach(container => {
+            const name = (container.getAttribute('aria-label') || container.innerText || '').split('\n')[0].trim();
+            if (name && name.length < 200) {
+                attachments.push({
+                    name,
+                    size: 'unknown',
+                    type: _guessTypeFromName(name),
+                });
+            }
+        });
+    }
+
+    return {
+        hasAttachments: attachments.length > 0,
+        attachments,
+    };
+}
+
+// --- Fetch actual attachment data (binary) from the page ---
+async function fetchAttachmentData(index = 0) {
+    const url = window.location.href;
+
+    // Gmail
+    if (url.includes('mail.google.com')) {
+        return await _fetchGmailAttachment(index);
+    }
+    // Outlook
+    if (url.includes('outlook.live.com') || url.includes('outlook.office.com')) {
+        return await _fetchOutlookAttachment(index);
+    }
+
+    return { success: false, error: 'Not on a supported email platform' };
+}
+
+async function _fetchGmailAttachment(index) {
+    // Strategy 1: Find elements with download_url attribute
+    // Gmail format: "mime_type:filename:https://mail.google.com/...&disp=safe"
+    const downloadEls = document.querySelectorAll('[download_url]');
+    if (downloadEls.length === 0) {
+        // Strategy 2: Find attachment download links by pattern
+        const allLinks = document.querySelectorAll('a[href*="&disp="]');
+        const attachLinks = Array.from(allLinks).filter(a => {
+            const h = a.href;
+            return h.includes('mail.google.com') && (h.includes('disp=safe') || h.includes('disp=attd'));
+        });
+        if (attachLinks.length === 0) {
+            return { success: false, error: 'No downloadable attachments found. Try downloading manually.' };
+        }
+        return await _downloadFromUrl(attachLinks[Math.min(index, attachLinks.length - 1)]);
+    }
+
+    const el = downloadEls[Math.min(index, downloadEls.length - 1)];
+    const attr = el.getAttribute('download_url') || '';
+    // Parse: "mime_type:filename:url"
+    const colonIdx = attr.indexOf(':');
+    const secondColon = attr.indexOf(':', colonIdx + 1);
+    const mime = attr.substring(0, colonIdx);
+    const filename = attr.substring(colonIdx + 1, secondColon);
+    const downloadUrl = attr.substring(secondColon + 1);
+
+    if (!downloadUrl || !downloadUrl.startsWith('http')) {
+        return { success: false, error: 'Could not parse attachment download URL' };
+    }
+
+    try {
+        const resp = await fetch(downloadUrl, { credentials: 'include' });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const blob = await resp.blob();
+        const base64 = await _blobToBase64(blob);
+        return {
+            success: true,
+            filename: filename || 'attachment',
+            mimeType: mime || blob.type,
+            size: blob.size,
+            base64: base64,
+        };
+    } catch (e) {
+        return { success: false, error: `Download failed: ${e.message}` };
+    }
+}
+
+async function _downloadFromUrl(linkEl) {
+    const downloadUrl = linkEl.href;
+    const filename = linkEl.getAttribute('download') || linkEl.innerText?.trim() || 'attachment';
+    try {
+        const resp = await fetch(downloadUrl, { credentials: 'include' });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const blob = await resp.blob();
+        const base64 = await _blobToBase64(blob);
+        return {
+            success: true,
+            filename: filename,
+            mimeType: blob.type,
+            size: blob.size,
+            base64: base64,
+        };
+    } catch (e) {
+        return { success: false, error: `Download failed: ${e.message}` };
+    }
+}
+
+async function _fetchOutlookAttachment(index) {
+    // Outlook: look for download links in attachment cards
+    const downloadLinks = document.querySelectorAll(
+        'a[href*="attachment"], a[aria-label*="Download"], button[aria-label*="Download"]'
+    );
+    if (downloadLinks.length === 0) {
+        return { success: false, error: 'No downloadable Outlook attachments found. Try downloading manually.' };
+    }
+    const link = downloadLinks[Math.min(index, downloadLinks.length - 1)];
+    if (link.href) {
+        return await _downloadFromUrl(link);
+    }
+    return { success: false, error: 'Outlook attachment links not accessible. Try downloading manually.' };
+}
+
+function _blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const dataUrl = reader.result;
+            resolve(dataUrl.split(',')[1]); // strip "data:...;base64,"
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+    });
+}
+
+function _guessTypeFromName(filename) {
+    const ext = (filename.split('.').pop() || '').toLowerCase();
+    const typeMap = {
+        pdf: 'application/pdf',
+        doc: 'application/msword', docx: 'application/msword',
+        xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.ms-excel',
+        ppt: 'application/vnd.ms-powerpoint', pptx: 'application/vnd.ms-powerpoint',
+        zip: 'application/zip', rar: 'application/x-rar',
+        exe: 'application/x-executable', msi: 'application/x-executable',
+        js: 'text/javascript', vbs: 'text/vbscript',
+        html: 'text/html', htm: 'text/html',
+        jpg: 'image/jpeg', png: 'image/png', gif: 'image/gif',
+        txt: 'text/plain', csv: 'text/csv',
+    };
+    return typeMap[ext] || 'application/octet-stream';
 }
 
 // Simple toast notification system
