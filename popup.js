@@ -86,18 +86,25 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // ── B. Have ready-made email content (right-click page scan / double-click) ──
         if (response && response.type === 'email' && response.content) {
-            // Check if there's a From: line
-            const match = response.content.match(/^From:\s*(.+)/m);
-            if (match) {
-                document.getElementById('emailSender').value = match[1].trim();
+            let content = response.content;
+            
+            // 1. Extract From: line if present
+            const fromMatch = content.match(/^From:\s*(.+)$/mi);
+            if (fromMatch) {
+                document.getElementById('emailSender').value = fromMatch[1].trim();
+                content = content.replace(/^From:\s*.+$/mi, '').trimStart();
             }
-            if (response.content.startsWith('Subject:')) {
-                const parts = response.content.split('\n\n');
-                document.getElementById('emailSubject').value = parts[0].replace('Subject:', '').trim();
-                document.getElementById('emailBody').value    = parts.slice(1).join('\n\n').trim();
-            } else {
-                document.getElementById('emailBody').value = response.content;
+            
+            // 2. Extract Subject: line if present
+            const subjectMatch = content.match(/^Subject:\s*(.+)$/mi);
+            if (subjectMatch) {
+                document.getElementById('emailSubject').value = subjectMatch[1].trim();
+                content = content.replace(/^Subject:\s*.+$/mi, '').trimStart();
             }
+            
+            // 3. The rest is the body
+            document.getElementById('emailBody').value = content.trim();
+
             emailTab.classList.remove('hidden');
             urlTab.classList.add('hidden');
             scanEmail();
@@ -322,11 +329,14 @@ async function scanEmail() {
         const emailContent = `Subject: ${emailSubject}\n\n${emailBody}`;
         const emailSender = document.getElementById('emailSender').value.trim();
 
+        const aiToggle = document.getElementById('aiToggle');
+
         const result = await chrome.runtime.sendMessage({
             action: 'scanEmail',
             content: emailContent,
             sender: emailSender,
-            type: 'text'
+            type: 'text',
+            enableAIDetection: aiToggle ? aiToggle.checked : false
         });
 
         displayEmailResult(result);
@@ -503,6 +513,11 @@ function displayEmailResult(result) {
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
                     <span style="font-size: 13px;">📎 Attachment Analysis:</span>
                     <span style="font-weight:bold; font-size: 13px; color: ${c.attachmentScore >= 30 ? '#ff6b6b' : (c.attachmentScore > 0 ? '#ffb347' : '#888')};">${c.attachmentScore > 0 ? c.attachmentScore + '/100' : 'No Attachment'}</span>
+                </div>
+                
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
+                    <span style="font-size: 13px;">🤖 AI Pattern (LLM):</span>
+                    <span style="font-weight:bold; font-size: 13px; color: ${c.aiFingerprintScore >= 50 ? '#ff6b6b' : (c.aiFingerprintScore > 0 ? '#ffb347' : '#888')};">${c.aiFingerprintScore > 0 ? c.aiFingerprintScore + '/100' : 'No Patterns'}</span>
                 </div>
             </div>
         `;

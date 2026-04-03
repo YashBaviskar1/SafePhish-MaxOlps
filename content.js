@@ -17,9 +17,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'extractEmailSubjectOnly') {
         try {
             const subject = extractSubjectOnly();
-            sendResponse({ subject });
+            const emailData = extractEmailContent(); // Reuse extraction logic for sender
+            sendResponse({ 
+                subject: subject,
+                sender: emailData.sender
+            });
         } catch (e) {
-            sendResponse({ subject: '' });
+            sendResponse({ subject: '', sender: '' });
         }
         return true;
     }
@@ -98,6 +102,7 @@ function extractEmailContent(targetNode = null) {
     // Gmail
     if (url.includes('mail.google.com')) {
         // Try to find the active message subject and sender
+        // KEEPING ORIGINAL SELECTORS FOR SENDER AND SUBJECT AS REQUESTED
         const senderElement = document.querySelector('.gD');
         const subjectElement = document.querySelector('h2.hP');
         // Find visible message bodies
@@ -107,14 +112,16 @@ function extractEmailContent(targetNode = null) {
         subject = subjectElement ? subjectElement.innerText : '';
         
         if (bodies && bodies.length > 0) {
-            // Take the last one as it's usually the most recent reply/message in thread
-            body = bodies[bodies.length - 1].innerText;
+            // Updated: Take the FIRST one (original message) instead of the last one
+            // This ensures consistency with the sender and subject info fetched above.
+            body = bodies[0].innerText;
         } else {
             // Fallback to previous selectors
             const bodyElements = document.querySelectorAll('.adn.ads');
             if (bodyElements && bodyElements.length > 0) {
-                const lastMessage = bodyElements[bodyElements.length - 1];
-                const actualBody = lastMessage.querySelector('.ii.gt') || lastMessage;
+                // Consistent with bodies[0]: Take the FIRST message in thread
+                const firstMessage = bodyElements[0];
+                const actualBody = firstMessage.querySelector('.ii.gt') || firstMessage;
                 body = actualBody.innerText;
             }
         }

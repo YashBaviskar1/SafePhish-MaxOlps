@@ -39,6 +39,13 @@ uv.lock
 Thumbs.db
 
 .env
+
 #For testing the hidden phishing links in web page
 test.html
 ModelTraining/venv/
+
+
+#doumentaion
+AI_DETECTOR_IMPROVEMENT.md
+
+
