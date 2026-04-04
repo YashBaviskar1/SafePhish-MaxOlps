@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { Shield, LayoutDashboard, Search, X, Calendar, User, Link as LinkIcon, FileText, ExternalLink, Mail, Info, ChevronRight, Activity, AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
+import { Shield, LayoutDashboard, Search, X, Calendar, User, Link as LinkIcon, FileText, ExternalLink, Mail, Info, ChevronRight, Activity, AlertTriangle, CheckCircle2, Clock, Map } from 'lucide-react';
 import './App.css';
 
 const API_BASE = 'http://localhost:5001/api';
@@ -11,6 +11,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [selectedScan, setSelectedScan] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [activeTab, setActiveTab] = useState('stream');
 
   useEffect(() => {
     fetchData();
@@ -89,73 +90,92 @@ const Dashboard = () => {
         </div>
       </section>
 
-      <section className="data-section">
-        <div className="section-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-             <Clock size={20} color="var(--accent-primary)" />
-             <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Live Analysis Stream</h2>
-          </div>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Auto-updating every 10 seconds</p>
-        </div>
+      <div className="tabs-container">
+        <button 
+          className={`tab-button ${activeTab === 'stream' ? 'active' : ''}`}
+          onClick={() => setActiveTab('stream')}
+        >
+           <Activity size={18} /> Live Stream
+        </button>
+        <button 
+          className={`tab-button ${activeTab === 'clusters' ? 'active' : ''}`}
+          onClick={() => setActiveTab('clusters')}
+        >
+           <Map size={18} /> Cluster Analysis
+        </button>
+      </div>
 
-        {loading ? (
-          <div style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-muted)' }}>Loading records...</div>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Type</th>
-                <th>Target</th>
-                <th>Verdict</th>
-                <th>Confidence</th>
-                <th>Timestamp</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredScans.map(scan => (
-                <tr key={scan.id} onClick={() => openScan(scan.id)}>
-                  <td>
-                    <span className="type-tag" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      {scan.scan_type === 'URL' ? <LinkIcon size={14} /> : <Mail size={14} />}
-                      {scan.scan_type}
-                    </span>
-                  </td>
-                  <td style={{ maxWidth: '400px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    <span style={{ fontWeight: 500 }}>{scan.target}</span>
-                  </td>
-                  <td>
-                    <span className={`badge ${scan.is_phishing ? 'badge-phishing' : 'badge-legitimate'}`}>
-                      {scan.is_phishing ? 'PHISHING' : 'LEGITIMATE'}
-                    </span>
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                       <div style={{ width: '40px', height: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '2px', overflow: 'hidden' }}>
-                          <div style={{ width: `${scan.confidence}%`, height: '100%', background: scan.is_phishing ? 'var(--danger)' : 'var(--success)' }}></div>
-                       </div>
-                       <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>{scan.confidence}%</span>
-                    </div>
-                  </td>
-                  <td style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                    {new Date(scan.timestamp).toLocaleString()}
-                  </td>
-                  <td>
-                    <ChevronRight size={18} color="var(--text-muted)" />
-                  </td>
-                </tr>
-              ))}
-              {filteredScans.length === 0 && (
+      {activeTab === 'stream' ? (
+        <section className="data-section">
+          <div className="section-header">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+               <Clock size={20} color="var(--accent-primary)" />
+               <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Live Analysis Stream</h2>
+            </div>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Auto-updating every 10 seconds</p>
+          </div>
+
+          {loading ? (
+            <div style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-muted)' }}>Loading records...</div>
+          ) : (
+            <table>
+              <thead>
                 <tr>
-                  <td colSpan="6" style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)' }}>
-                    No analysis records found. Perform a scan in the extension to see results here.
-                  </td>
+                  <th>Type</th>
+                  <th>Target</th>
+                  <th>Verdict</th>
+                  <th>Confidence</th>
+                  <th>Timestamp</th>
+                  <th></th>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        )}
-      </section>
+              </thead>
+              <tbody>
+                {filteredScans.map(scan => (
+                  <tr key={scan.id} onClick={() => openScan(scan.id)}>
+                    <td>
+                      <span className="type-tag" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        {scan.scan_type === 'URL' ? <LinkIcon size={14} /> : <Mail size={14} />}
+                        {scan.scan_type}
+                      </span>
+                    </td>
+                    <td style={{ maxWidth: '400px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontWeight: 500 }}>{scan.target}</span>
+                    </td>
+                    <td>
+                      <span className={`badge ${scan.is_phishing ? 'badge-phishing' : 'badge-legitimate'}`}>
+                        {scan.is_phishing ? 'PHISHING' : 'LEGITIMATE'}
+                      </span>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                         <div style={{ width: '40px', height: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '2px', overflow: 'hidden' }}>
+                            <div style={{ width: `${scan.confidence}%`, height: '100%', background: scan.is_phishing ? 'var(--danger)' : 'var(--success)' }}></div>
+                         </div>
+                         <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>{scan.confidence}%</span>
+                      </div>
+                    </td>
+                    <td style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                      {new Date(scan.timestamp).toLocaleString()}
+                    </td>
+                    <td>
+                      <ChevronRight size={18} color="var(--text-muted)" />
+                    </td>
+                  </tr>
+                ))}
+                {filteredScans.length === 0 && (
+                  <tr>
+                    <td colSpan="6" style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)' }}>
+                      No analysis records found. Perform a scan in the extension to see results here.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )}
+        </section>
+      ) : (
+        <ClusterAnalysisTab onOpenScan={openScan} />
+      )}
 
       {selectedScan && (
         <ScanDetailModal 
@@ -163,6 +183,211 @@ const Dashboard = () => {
           onClose={() => setSelectedScan(null)} 
         />
       )}
+    </div>
+  );
+};
+
+const ClusterAnalysisTab = ({ onOpenScan }) => {
+  const [clustersData, setClustersData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [hoveredPoint, setHoveredPoint] = useState(null);
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    fetchClusters();
+  }, []);
+
+  const fetchClusters = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/clusters`);
+      setClustersData(res.data.clusters);
+    } catch (err) {
+      console.error('Error fetching clusters:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!loading && canvasRef.current && clustersData.length > 0) {
+      drawClusters(canvasRef.current, clustersData, hoveredPoint);
+    }
+  }, [loading, clustersData, hoveredPoint]);
+
+  const scalePoint = (item, width, height, data) => {
+    const xs = data.map(d => d.x);
+    const ys = data.map(d => d.y);
+    const minX = Math.min(...xs) - 0.1;
+    const maxX = Math.max(...xs) + 0.1;
+    const minY = Math.min(...ys) - 0.1;
+    const maxY = Math.max(...ys) + 0.1;
+    
+    // Range protection
+    const diffX = (maxX - minX) === 0 ? 1 : (maxX - minX);
+    const diffY = (maxY - minY) === 0 ? 1 : (maxY - minY);
+    
+    return {
+      x: ((item.x - minX) / diffX) * (width - 80) + 40,
+      y: height - (((item.y - minY) / diffY) * (height - 80) + 40)
+    };
+  };
+
+  const drawClusters = (canvas, data, hovered) => {
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+    
+    // High-DPI canvas fix
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    if(canvas.width !== rect.width * dpr) {
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.scale(dpr, dpr);
+    }
+    
+    const drawWidth = rect.width;
+    const drawHeight = rect.height;
+    
+    ctx.clearRect(0, 0, drawWidth, drawHeight);
+    
+    // Draw grid
+    ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+    ctx.lineWidth = 1;
+    for(let i=0; i<10; i++) {
+        ctx.beginPath();
+        ctx.moveTo(0, drawHeight * (i/10));
+        ctx.lineTo(drawWidth, drawHeight * (i/10));
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(drawWidth * (i/10), 0);
+        ctx.lineTo(drawWidth * (i/10), drawHeight);
+        ctx.stroke();
+    }
+    
+    const clusterColors = ['#6366f1', '#a855f7', '#ec4899', '#f59e0b', '#3b82f6'];
+
+    data.forEach(item => {
+      const pos = scalePoint(item, drawWidth, drawHeight, data);
+      ctx.beginPath();
+      
+      const isHovered = hovered && hovered.id === item.id;
+      const radius = isHovered ? 12 : 8;
+      
+      ctx.arc(pos.x, pos.y, radius, 0, 2 * Math.PI);
+      
+      const isPhishing = item.is_phishing;
+      // Core cluster color
+      let color = clusterColors[item.cluster % clusterColors.length];
+      
+      ctx.fillStyle = color;
+      
+      // If hovered, glow effect
+      if (isHovered) {
+         ctx.shadowColor = color;
+         ctx.shadowBlur = 10;
+      } else {
+         ctx.shadowBlur = 0;
+      }
+      
+      ctx.fill();
+      
+      ctx.lineWidth = isHovered ? 3 : 2;
+      ctx.strokeStyle = isPhishing ? '#ef4444' : '#22c55e'; // Red border if phishing, Green if legitimate
+      ctx.stroke();
+      ctx.shadowBlur = 0; // Reset
+    });
+  };
+
+  const handleMouseMove = (e) => {
+    if(!canvasRef.current || clustersData.length === 0) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    let closest = null;
+    let minDist = 15; // Hover radius
+    
+    clustersData.forEach(item => {
+      const pos = scalePoint(item, rect.width, rect.height, clustersData);
+      const dist = Math.sqrt(Math.pow(pos.x - mouseX, 2) + Math.pow(pos.y - mouseY, 2));
+      if (dist < minDist) {
+        minDist = dist;
+        closest = item;
+      }
+    });
+    
+    setHoveredPoint(closest);
+  };
+  
+  const handleClick = () => {
+    if(hoveredPoint) {
+       onOpenScan(hoveredPoint.id);
+    }
+  };
+
+  return (
+    <div className="cluster-analysis-container">
+       <div className="section-header" style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: '1.5rem 1.5rem 0 0', display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'flex-start' }}>
+          <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
+             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                 <Map size={20} color="var(--accent-primary)" />
+                 <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Campaign Clustering (TF-IDF + PCA)</h2>
+             </div>
+             <div style={{ display: 'flex', gap: '1rem', fontSize: '0.8rem' }}>
+                 <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: 'transparent', border: '2px solid #ef4444' }}></div>
+                    Phishing
+                 </span>
+                 <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: 'transparent', border: '2px solid #22c55e' }}></div>
+                    Legitimate
+                 </span>
+             </div>
+          </div>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+             This map projects behavioral and textual artifacts into a 2D space using KMeans. Points clustered together represent similar attack vectors or campaigns. Colors represent identified campaigns.
+          </p>
+       </div>
+       <div className="canvas-wrapper" style={{ position: 'relative', width: '100%', height: '500px', background: '#0a0d25', border: '1px solid var(--card-border)', borderTop: 'none', borderRadius: '0 0 1.5rem 1.5rem' }}>
+          {loading ? (
+             <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>Analyzing dimensions...</div>
+          ) : clustersData.length > 0 ? (
+             <>
+               <canvas 
+                 ref={canvasRef} 
+                 style={{ width: '100%', height: '100%', cursor: hoveredPoint ? 'pointer' : 'crosshair' }}
+                 onMouseMove={handleMouseMove}
+                 onClick={handleClick}
+                 onMouseLeave={() => setHoveredPoint(null)}
+               />
+               {hoveredPoint && (
+                 <div className="canvas-tooltip" style={{
+                    position: 'absolute',
+                    top: '1rem', right: '1rem',
+                    background: 'rgba(15, 23, 42, 0.9)',
+                    backdropFilter: 'blur(10px)',
+                    border: '1px solid var(--card-border)',
+                    padding: '1rem',
+                    borderRadius: '0.75rem',
+                    width: '300px',
+                    pointerEvents: 'none'
+                 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                       <span className={`badge ${hoveredPoint.is_phishing ? 'badge-phishing' : 'badge-legitimate'}`}>{hoveredPoint.is_phishing ? 'PHISHING' : 'LEGIT'}</span>
+                       <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{hoveredPoint.scan_type}</span>
+                    </div>
+                    <p style={{ fontWeight: 700, wordBreak: 'break-all', fontSize: '0.9rem', marginBottom: '0.5rem' }}>{hoveredPoint.target}</p>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Campaign Cluster ID: <strong style={{ color: 'var(--accent-primary)' }}>#{hoveredPoint.cluster}</strong></p>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Confidence: <strong style={{ color: '#fff' }}>{hoveredPoint.confidence}%</strong></p>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Click point to open full analysis</p>
+                 </div>
+               )}
+             </>
+          ) : (
+             <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>Not enough data for clustering (Need at least 3 records).</div>
+          )}
+       </div>
     </div>
   );
 };
