@@ -47,9 +47,9 @@ async function extractEmailFromTab(tabId) {
 // ─── Populate email fields from extracted data ───
 function populateEmailFields(emailData) {
     if (!emailData) return;
-    document.getElementById('emailSender').value  = emailData.sender  || '';
+    document.getElementById('emailSender').value = emailData.sender || '';
     document.getElementById('emailSubject').value = emailData.subject || '';
-    document.getElementById('emailBody').value    = emailData.body    || '';
+    document.getElementById('emailBody').value = emailData.body || '';
 }
 
 // ─── Show a status line in the email tab while extracting ───
@@ -87,21 +87,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         // ── B. Have ready-made email content (right-click page scan / double-click) ──
         if (response && response.type === 'email' && response.content) {
             let content = response.content;
-            
+
             // 1. Extract From: line if present
             const fromMatch = content.match(/^From:\s*(.+)$/mi);
             if (fromMatch) {
                 document.getElementById('emailSender').value = fromMatch[1].trim();
                 content = content.replace(/^From:\s*.+$/mi, '').trimStart();
             }
-            
+
             // 2. Extract Subject: line if present
             const subjectMatch = content.match(/^Subject:\s*(.+)$/mi);
             if (subjectMatch) {
                 document.getElementById('emailSubject').value = subjectMatch[1].trim();
                 content = content.replace(/^Subject:\s*.+$/mi, '').trimStart();
             }
-            
+
             // 3. The rest is the body
             document.getElementById('emailBody').value = content.trim();
 
@@ -136,10 +136,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('urlInput').value = url;
 
         const isEmailPlatform =
-            url.includes('mail.google.com')    ||
-            url.includes('outlook.live.com')   ||
+            url.includes('mail.google.com') ||
+            url.includes('outlook.live.com') ||
             url.includes('outlook.office.com') ||
-            url.includes('mail.yahoo.com')     ||
+            url.includes('mail.yahoo.com') ||
             url.includes('mail.proton.me');
 
         if (isEmailPlatform) {
@@ -200,7 +200,7 @@ async function triggerDeceptiveScan(skipAutoScanHidden = false) {
 
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab) {
-        setDeceptiveBtnsState(false, '🕵️ Scan Page');
+        setDeceptiveBtnsState(false, ' Scan Page');
         return;
     }
 
@@ -222,30 +222,30 @@ async function triggerDeceptiveScan(skipAutoScanHidden = false) {
         } catch (err) {
             showDeceptiveResult({
                 error: 'Cannot scan this page. ' +
-                       (tab.url.startsWith('file://') ?
+                    (tab.url.startsWith('file://') ?
                         'For local files, go to chrome://extensions → Details and enable "Allow access to file URLs".' :
                         'The extension could not access this page.')
             });
-            setDeceptiveBtnsState(false, '🕵️ Scan Page');
+            setDeceptiveBtnsState(false, ' Scan Page');
             return;
         }
     }
 
     showDeceptiveResult(result || { count: 0, urls: [] });
-    
+
     // Auto-scan the first hidden URL found — only if not requested to skip
     if (!skipAutoScanHidden && result && result.urls && result.urls.length > 0) {
         document.getElementById('email-tab').classList.add('hidden');
         document.getElementById('url-tab').classList.remove('hidden');
         document.getElementById('urlInput').value = result.urls[0];
-        
+
         // Minor delay to let the user digest the "deceptive elements found" result before the loader starts
         setTimeout(() => {
             scanUrl();
         }, 1200);
     }
 
-    setDeceptiveBtnsState(false, '🕵️ Scan Page');
+    setDeceptiveBtnsState(false, ' Scan Page');
 }
 
 function showDeceptiveResult(result) {
@@ -368,7 +368,7 @@ function displayUrlResult(result) {
     if (result.topFeatures && result.topFeatures.length > 0) {
         const top4 = result.topFeatures.slice(0, 4);
         const featureList = top4.map(f => {
-            const isRisky = f.score < 0; 
+            const isRisky = f.score < 0;
             const icon = isRisky ? '🚨' : '🛡️';
             return `${icon} ${f.feature}`;
         }).join(', ');
@@ -401,7 +401,6 @@ function displayUrlResult(result) {
             ${explainabilityHtml}
             <div style="margin-top: 1rem;">
                 <button id="viewFeaturesBtn" class="btn btn-secondary">
-                    <span class="material-symbols-outlined">analytics</span>
                     Detailed Analysis
                 </button>
             </div>
@@ -414,7 +413,7 @@ function displayUrlResult(result) {
     if (btn) {
         btn.addEventListener('click', () => {
             // Store results for the detail page, including topFeatures
-            chrome.storage.local.set({ 
+            chrome.storage.local.set({
                 lastAnalysis: {
                     url: result.url,
                     isPhishing: result.isPhishing,
@@ -444,7 +443,7 @@ function displayEmailResult(result) {
     if (result.urls) {
         const { phishingUrls, legitimateUrls, summary } = result.urls;
         let urlVerdictList = '';
-        
+
         if (phishingUrls && phishingUrls.length > 0) {
             phishingUrls.forEach(urlData => {
                 urlVerdictList += `
@@ -457,7 +456,7 @@ function displayEmailResult(result) {
                     </div>`;
             });
         }
-        
+
         if (legitimateUrls && legitimateUrls.length > 0) {
             legitimateUrls.forEach(urlData => {
                 urlVerdictList += `
@@ -480,27 +479,25 @@ function displayEmailResult(result) {
             </div>`;
     }
 
-    let componentsSection = '';
+    let componentsHtml = '';
     if (result.components) {
         const c = result.components;
-        componentsSection = `
-            <div class="detail-item">
-                <strong>📊 5-Engine Master Breakdown</strong>
-                <div style="display: flex; flex-direction: column; gap: 2px; margin-top: 0.5rem;">
-                    ${[
-                        { label: '📧 Email Content', score: c.mlContentScore },
-                        { label: '🔗 URL Risk', score: c.urlScore },
-                        { label: '🕸️ Behavioral', score: c.behaviorScore },
-                        { label: '🕵️ Contextual', score: c.contextScore },
-                        { label: '📎 Attachments', score: c.attachmentScore || 0 },
-                        { label: '🤖 AI Pattern (LLM)', score: c.aiFingerprintScore || 0 }
-                    ].map(engine => `
-                        <div style="display: flex; justify-content: space-between; font-size: 0.75rem; padding: 2px 0;">
-                            <span style="color: var(--text-muted);">${engine.label}</span>
-                            <span style="font-weight: 700; color: ${engine.score >= 50 ? 'var(--danger)' : 'var(--safe)'}">${engine.score}/100</span>
-                        </div>
-                    `).join('')}
-                </div>
+        componentsHtml = `
+            <strong>📊 5-Engine Master Breakdown</strong>
+            <div style="display: flex; flex-direction: column; gap: 4px; margin-top: 0.5rem;">
+                ${[
+                { label: '📧 Content', score: c.mlContentScore },
+                { label: '🔗 URL Risk', score: c.urlScore },
+                { label: '🕸️ Behavior', score: c.behaviorScore },
+                { label: '🕵️ Context', score: c.contextScore },
+                { label: '📎 Attachments', score: c.attachmentScore || 0 },
+                { label: '🤖 AI Pattern', score: c.aiFingerprintScore || 0 }
+            ].map(engine => `
+                    <div style="display: flex; justify-content: space-between; font-size: 0.75rem; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <span style="color: var(--text-muted);">${engine.label}</span>
+                        <span style="font-weight: 700; color: ${engine.score >= 50 ? 'var(--danger)' : (engine.score >= 30 ? 'var(--neutral)' : 'var(--safe)')}">${engine.score}/100</span>
+                    </div>
+                `).join('')}
             </div>`;
     }
 
@@ -516,16 +513,35 @@ function displayEmailResult(result) {
             </div>`;
     }
 
+    // Toggle appropriate sections
+    const inputSection = document.getElementById('emailInputSection');
+    const layout = document.getElementById('emailAnalysisLayout');
+    const engineDiv = document.getElementById('engineBreakdown');
+    const engineContentDiv = document.getElementById('engineBreakdownContent');
+
+    // Ensure inputs stay visible as requested
+    if (inputSection) inputSection.classList.remove('hidden');
+    layout.classList.remove('hidden');
+
+    if (result.components) {
+        engineContentDiv.innerHTML = componentsHtml;
+        engineDiv.classList.remove('hidden');
+    }
+
     contentDiv.innerHTML = `
         <div class="result-header ${riskColor}">
             <h3>${riskLevel}</h3>
             <p>Total Master Risk Score: ${result.confidence}/100</p>
         </div>
         <div class="result-details">
-            ${componentsSection}
             <div class="detail-item">
                 <strong>Verdict</strong>
-                <p>${result.isPhishing ? '⚠️ Potential Phishing via 5-Engine Analysis' : '✅ Looks Safe across all components'}</p>
+                <p style="font-weight: 700; color: ${result.isPhishing ? 'var(--danger)' : 'var(--safe)'}">
+                    ${result.isPhishing ? '🚨 Phishing Detected' : '✅ Verified Safe'}
+                </p>
+                <p style="font-size: 0.75rem; margin-top: 4px; opacity: 0.8;">
+                    ${result.isPhishing ? 'Analysis indicates high probability of deceptive intent.' : 'Cross-engine analysis found no significant risk factors.'}
+                </p>
             </div>
             ${urlSection}
             ${findingsSection}
@@ -591,8 +607,10 @@ function hideUrlLoading() {
 }
 
 function showEmailLoading() {
+    // Keep inputs visible but add loading state
     document.getElementById('emailLoading').classList.remove('hidden');
     document.getElementById('emailResult').classList.add('hidden');
+    document.getElementById('engineBreakdown').classList.add('hidden');
 }
 
 function hideEmailLoading() {
@@ -894,9 +912,9 @@ function displayAttachmentResult(result) {
     }
 
     const riskColor = result.riskScore >= 60 ? 'risk-high' :
-                      result.riskScore >= 30 ? 'risk-medium' : 'risk-safe';
+        result.riskScore >= 30 ? 'risk-medium' : 'risk-safe';
     const riskEmoji = result.riskScore >= 60 ? '🚨' :
-                      result.riskScore >= 30 ? '⚠️' : '✅';
+        result.riskScore >= 30 ? '⚠️' : '✅';
 
     // Build findings HTML
     const findingsHtml = result.findings && result.findings.length > 0
@@ -1027,13 +1045,13 @@ async function autoScanAttachmentsIfPresent() {
         const response = await chrome.tabs.sendMessage(tab.id, { action: 'extractAttachmentInfo' });
         if (response && response.hasAttachments && response.attachments.length > 0) {
             console.log('SafePhish: Found attachments! Fetching first one:', response.attachments[0].name);
-            
+
             // 1. Ensure the file tab UI is updated
             await detectAttachmentsFromPage();
-            
+
             // 2. Select the first one
             await autoFetchAttachment(0);
-            
+
             // 3. Trigger the scan (only if fetch succeeded)
             if (selectedBase64 || selectedFile) {
                 console.log('SafePhish: Fetch successful. Starting attachment scan...');
