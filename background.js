@@ -27,7 +27,7 @@ chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.removeAll(() => {
         chrome.contextMenus.create({
             id: "scanUrl",
-            title: "🔗 Scan Link for Phishing",
+            title: " Scan Link for Phishing",
             contexts: ["link"]
         });
 
@@ -239,7 +239,7 @@ async function _analyzeEmailUrls(emailContent) {
     // Normalize URLs (remove trailing slashes) before deduplication
     // This prevents the same URL appearing twice with/without trailing slash
     const normalizedUrls = urls.map(url => url.replace(/\/+$/, ''));
-    
+
     // Remove duplicates and limit to 5
     const uniqueUrls = [...new Set(normalizedUrls)];
     const urlsToScan = uniqueUrls.slice(0, 5);
