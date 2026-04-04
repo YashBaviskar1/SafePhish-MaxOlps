@@ -2,7 +2,24 @@
 
 SafePhish is a state-of-the-art phishing detection ecosystem that fuses deep learning, behavioral intelligence, and contextual analysis to protect users across web and email platforms.
 
-## 🛡️ Core Detection Ecosystem
+## What Makes SafePhish Unique?
+
+### Content & Context
+- **ML-driven semantic analysis (XGBoost):** Flags phishing intents and brand impersonation anomalies.
+- **Behavioral Mimicry:** Actively follows redirect chains (up to 3 hops) to uncover final hidden payload destinations.
+- **AI Fingerprint:** Analyzes linguistic entropy and burstiness to catch LLM-generated spear-phishing.
+
+### Defense-in-Depth
+- **Docker Sandbox:** Ephemeral Ubuntu containers for static triage, VBA macro hunting, and JS structure analysis.
+- **Master Risk Fusion:** Dynamic 0-100 weighted scoring engine across 5 unique sub-engines for high accuracy.
+- **API-First Design:** Flask-based ecosystem providing instant feedback to extensions and email clients.
+
+### Output & Response
+- **White-Box Clarity:** Extracts top 4 XGBoost feature contributions for human-readable detection reasoning.
+- **Automated SMTP Alerts:** Real-time HTML alerts to security teams containing threat scores and engine findings.
+- **Visual Logic:** Detects evasion techniques like multi-redirect hops before users click.
+
+## Core Detection Ecosystem
 
 ### 1. 30-Point Neural URL Analysis
 Our primary ML model analyzes URLs across 30 distinct feature dimensions to identify structural, technical, and reputation-based anomalies:
@@ -33,7 +50,7 @@ To counter the rise of AI-automated phishing, SafePhish identifies GPT/LLM signa
 - **Linguistic Formality**: Tracking the absence of contractions and over-formalized "AI voice."
 - **Passive Voice Prevalence**: Detecting the impersonal and distant tone typical of generative models.
 
-## 🛠️ Browser Security Features
+##  Browser Security Features
 
 ### 4. Deceptive UI "Scan the Page" Engine
 Integrated directly into the browser, this engine identifies UI-based attacks that bypass traditional scanners:
