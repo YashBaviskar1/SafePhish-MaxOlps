@@ -1,29 +1,31 @@
 /* Explainability Section Styles for React UI */
 
 :root {
-    --primary: #5c6bc0;
-    --primary-light: #7986cb;
-    --accent: #ff4081;
-    --bg-dark: #0f172a;
-    --card-bg: rgba(30, 41, 59, 0.7);
+    --primary: #6366f1;
+    --primary-light: #818cf8;
+    --accent: #d946ef;
+    --bg-dark: #020617;
+    --card-bg: rgba(255, 255, 255, 0.03);
     --card-border: rgba(255, 255, 255, 0.1);
     --text-main: #f8fafc;
     --text-muted: #94a3b8;
     --safe: #4ade80;
     --neutral: #fbbf24;
     --danger: #ef4444;
-    --safe-glow: rgba(74, 222, 128, 0.1);
-    --neutral-glow: rgba(251, 191, 36, 0.1);
-    --danger-glow: rgba(239, 68, 68, 0.1);
+    --safe-glow: rgba(74, 222, 128, 0.15);
+    --neutral-glow: rgba(251, 191, 36, 0.15);
+    --danger-glow: rgba(239, 68, 68, 0.15);
 }
 
 .explainability-section {
     margin-top: 1.5rem;
-    padding: 1.25rem;
-    background: rgba(15, 23, 42, 0.4);
-    border-radius: 1rem;
+    padding: 1.5rem;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 1.25rem;
     border: 1px solid var(--card-border);
-    backdrop-filter: blur(10px);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
 }
 
 .section-header {
@@ -53,13 +55,14 @@
 }
 
 .driver-card {
-    background: rgba(30, 41, 59, 0.5);
+    background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.05);
     border-radius: 0.75rem;
-    padding: 1rem;
+    padding: 1.125rem;
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 0.625rem;
+    backdrop-filter: blur(8px);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
@@ -67,9 +70,10 @@
 }
 
 .driver-card:hover {
-    background: rgba(30, 41, 59, 0.8);
-    transform: translateY(-3px);
-    box-shadow: 0 8px 15px -6px rgba(0, 0, 0, 0.5);
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.2);
+    transform: translateY(-4px);
+    box-shadow: 0 12px 24px -10px rgba(0, 0, 0, 0.6);
 }
 
 .driver-rank {

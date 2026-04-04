@@ -9,7 +9,7 @@ const Sidebar = ({ currentPage, setCurrentPage }) => {
   ];
 
   return (
-    <aside className="fixed left-0 top-0 h-full flex flex-col bg-[#060819] w-64 border-r border-[#76767f]/20 shadow-2xl z-50">
+    <aside className="fixed left-0 top-0 h-full flex flex-col bg-[#020617]/40 backdrop-blur-2xl w-64 border-r border-white/5 shadow-2xl z-50">
       <div className="p-6">
         <div className="flex items-center gap-3">
           <div className="bg-[#aab3d8] p-1.5 rounded-md">
