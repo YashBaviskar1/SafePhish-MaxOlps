@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 
 const EmailReport = () => {
   const [emailData, setEmailData] = useState(null);
@@ -130,8 +130,8 @@ const EmailReport = () => {
 
       {/* 🔥 6-Engine Breakdown */}
       <section className="space-y-4">
-        <h3 className="text-lg font-bold text-white flex items-center gap-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-          <span className="text-[#aab3d8]">#</span> 6-Engine Master Fusion
+        <h3 className="text-lg font-bold text-white mb-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+          6-Engine Master Fusion
         </h3>
 
         <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
@@ -170,11 +170,11 @@ const EmailReport = () => {
         
         {/* 🔥 LEFT: Findings */}
         <section className="space-y-4">
-          <h3 className="text-lg font-bold text-white flex items-center gap-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-             <span className="text-[#aab3d8]">#</span> Explainability Findings
+          <h3 className="text-lg font-bold text-white mb-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+             Explainability
           </h3>
 
-          <div className="bg-[#060819] border border-[#76767f]/20 p-5 rounded-xl space-y-3 h-full">
+          <div className="glass-card p-5 rounded-xl space-y-3 h-full">
             {emailData.findings?.map((f, i) => {
                 let icon = "info";
                 let tagColor = "bg-[#76767f]/20 text-[#76767f]";
@@ -209,27 +209,24 @@ const EmailReport = () => {
 
         {/* 🔥 RIGHT: Extracted Payloads & AI */}
         <section className="space-y-4">
-          <h3 className="text-lg font-bold text-white flex items-center gap-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-            <span className="text-[#aab3d8]">#</span> Extracted Payloads
+          <h3 className="text-lg font-bold text-white mb-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+            Extracted Payloads
           </h3>
 
-          <div className="bg-[#060819] border border-[#76767f]/20 rounded-xl overflow-hidden h-full flex flex-col">
+          <div className="glass-card rounded-xl overflow-hidden h-full flex flex-col">
              
             {/* 1. URLs */}
             <div className="bg-[#76767f]/10 p-3 border-b border-[#76767f]/20 flex items-center gap-2">
               <span className="material-symbols-outlined text-[#aab3d8] text-sm">link</span>
               <h4 className="text-xs font-bold text-white uppercase tracking-wider" style={{ fontFamily: 'Plus Jakarta Sans, sans-serif' }}>Embedded Links ({emailData.urls.length})</h4>
             </div>
-            <div className="p-4 space-y-3 bg-[#060819]">
+            <div className="p-4 space-y-3">
               {emailData.urls?.length > 0 ? emailData.urls.map((u, i) => (
                 <div key={i} className={`p-3 rounded border ${u.verdict === 'PHISHING' ? 'bg-[#892401]/10 border-[#892401]/30' : 'bg-emerald-900/10 border-emerald-900/30'}`}>
                   <div className="flex justify-between items-center mb-2">
                     <span className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${u.verdict === 'PHISHING' ? 'bg-[#892401] text-white' : 'bg-emerald-600 text-white'}`}>
                       {u.score}% {u.verdict}
                     </span>
-                    <a href="#" className="text-[10px] text-[#76767f] hover:text-white flex items-center gap-1 transition-colors">
-                      Deep Scan <span className="material-symbols-outlined text-[12px]">open_in_new</span>
-                    </a>
                   </div>
                   <p className={`text-[11px] font-mono truncate ${u.verdict === 'PHISHING' ? 'text-[#892401]' : 'text-emerald-500'}`} title={u.url}>
                     {u.url}
@@ -245,7 +242,7 @@ const EmailReport = () => {
               <span className="material-symbols-outlined text-[#aab3d8] text-sm">attachment</span>
               <h4 className="text-xs font-bold text-white uppercase tracking-wider" style={{ fontFamily: 'Plus Jakarta Sans, sans-serif' }}>Files Scanned</h4>
             </div>
-            <div className="p-4 bg-[#060819]">
+            <div className="p-4">
               {emailData.attachmentScore > 0 ? (
                 <div className="p-3 rounded border bg-[#892401]/10 border-[#892401]/30 flex flex-col gap-2">
                     <span className="text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wider bg-[#892401] text-white self-start">
@@ -266,7 +263,7 @@ const EmailReport = () => {
               <span className="material-symbols-outlined text-[#aab3d8] text-sm">memory</span>
               <h4 className="text-xs font-bold text-white uppercase tracking-wider" style={{ fontFamily: 'Plus Jakarta Sans, sans-serif' }}>LLM Fingerprinting</h4>
             </div>
-            <div className="p-4 bg-[#060819] flex-1">
+            <div className="p-4 flex-1">
               {emailData.aiScore > 0 ? (
                 <div className={`p-3 rounded border ${emailData.aiScore >= 50 ? 'bg-[#892401]/10 border-[#892401]/30' : 'bg-[#f59e0b]/10 border-[#f59e0b]/30'} flex flex-col gap-2`}>
                    <div className="flex justify-between items-center mb-1">

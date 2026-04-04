@@ -22,6 +22,24 @@ import xgboost as xgb
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+import sqlite3
+
+# Path to the shared SQLite database in the dashboard folder
+DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dashboard", "database.sqlite"))
+
+def log_to_db(scan_type, target, is_phishing, confidence, full_data):
+    """Logs the analysis request to the SQLite database."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO analysis_logs (scan_type, target, is_phishing, confidence, full_data)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (scan_type, target, is_phishing, confidence, json.dumps(full_data)))
+        conn.commit()
+        conn.close()
+    except Exception as log_err:
+        print(f"⚠️ Failed to log to database: {log_err}")
 
 from feature_extractor import FeatureExtraction
 from context_engine import analyze_context
@@ -189,6 +207,17 @@ def predict_url():
         # Calculate explainability (Top 8 Drivers)
         top_features = calculate_top_features(url_model, features)
 
+        # Log to DB
+        log_to_db("URL", url, is_phishing, round(phish_prob * 100 if is_phishing else (1 - phish_prob) * 100, 1), {
+            "isPhishing": is_phishing,
+            "confidence": round(phish_prob * 100 if is_phishing else (1 - phish_prob) * 100, 1),
+            "phishingProbability": round(phish_prob * 100, 1),
+            "label": "PHISHING" if is_phishing else "LEGITIMATE",
+            "features": features,
+            "topFeatures": top_features,
+            "url": url
+        })
+
         return jsonify({
             "isPhishing": is_phishing,
             "confidence": round(phish_prob * 100 if is_phishing else (1 - phish_prob) * 100, 1),
@@ -264,6 +293,16 @@ def predict_email():
 
         phish_prob  = float(proba[phish_idx])
         is_phishing = phish_prob >= 0.5
+
+        # Log to DB
+        log_to_db("Email", subject, is_phishing, phish_prob * 100, {
+            "isPhishing": is_phishing,
+            "confidence": round(phish_prob * 100 if is_phishing else (1 - phish_prob) * 100, 1),
+            "phishingProbability": round(phish_prob * 100, 1),
+            "label": "PHISHING" if is_phishing else "LEGITIMATE",
+            "subject": subject,
+            "body": body
+        })
 
         return jsonify({
             "isPhishing": is_phishing,
@@ -545,6 +584,22 @@ def analyze_attachment():
         except OSError:
             pass
 
+        # Log to DB
+        log_to_db("Attachment", filename, is_malicious, final_score, {
+            "isMalicious": is_malicious,
+            "riskScore": final_score,
+            "label": "MALICIOUS" if is_malicious else "CLEAN",
+            "findings": all_findings,
+            "filename": filename,
+            "hash": file_hash,
+            "fileType": sandbox_result.get("fileType", "unknown"),
+            "layers": {
+                "sandbox": sandbox_result,
+                "virusTotalHash": vt_hash,
+                "virusTotalDetonation": vt_detonation,
+            },
+        })
+
         return jsonify({
             "filename": filename,
             "hash": file_hash,
@@ -657,6 +712,25 @@ def analyze_email_full():
         # If no flags were raised at all
         if not all_findings:
             all_findings.append("No malicious indicators detected across content, context, or behavior.")
+
+        # Log to DB
+        log_to_db("Email", sender_email or subject, is_phishing, final_risk_score, {
+            "isPhishing": is_phishing,
+            "riskScore": final_risk_score,
+            "label": "PHISHING" if is_phishing else "LEGITIMATE",
+            "findings": all_findings,
+            "components": {
+                "mlContentScore": round(ml_risk_score, 1),
+                "urlScore": incoming_url_score,
+                "contextScore": context_score,
+                "behaviorScore": behavior_score,
+                "attachmentScore": incoming_attachment_score,
+                "aiFingerprintScore": ai_score
+            },
+            "subject": subject,
+            "sender": sender_email,
+            "urls": urls
+        })
 
         return jsonify({
             "isPhishing": is_phishing,
