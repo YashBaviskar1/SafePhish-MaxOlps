@@ -130,7 +130,7 @@ const UrlReport = () => {
     {topFeatures && topFeatures.length > 0 && (
   <section className="explainability-section">
     <div className="section-header">
-      <h2>🧠 Neural Explainability Drivers</h2>
+      <h2>Explainability</h2>
       <p>These are the top 4 factors that most influenced our AI's decision for this URL.</p>
     </div>
     <div className="drivers-container">

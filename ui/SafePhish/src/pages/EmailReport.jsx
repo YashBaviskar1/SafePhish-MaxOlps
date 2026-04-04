@@ -130,8 +130,8 @@ const EmailReport = () => {
 
       {/* 🔥 6-Engine Breakdown */}
       <section className="space-y-4">
-        <h3 className="text-lg font-bold text-white flex items-center gap-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-          <span className="text-[#aab3d8]">#</span> 6-Engine Master Fusion
+        <h3 className="text-lg font-bold text-white mb-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+          6-Engine Master Fusion
         </h3>
 
         <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
@@ -170,8 +170,8 @@ const EmailReport = () => {
         
         {/* 🔥 LEFT: Findings */}
         <section className="space-y-4">
-          <h3 className="text-lg font-bold text-white flex items-center gap-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-             <span className="text-[#aab3d8]">#</span> Explainability Findings
+          <h3 className="text-lg font-bold text-white mb-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+             Explainability
           </h3>
 
           <div className="glass-card p-5 rounded-xl space-y-3 h-full">
@@ -209,8 +209,8 @@ const EmailReport = () => {
 
         {/* 🔥 RIGHT: Extracted Payloads & AI */}
         <section className="space-y-4">
-          <h3 className="text-lg font-bold text-white flex items-center gap-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-            <span className="text-[#aab3d8]">#</span> Extracted Payloads
+          <h3 className="text-lg font-bold text-white mb-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+            Extracted Payloads
           </h3>
 
           <div className="glass-card rounded-xl overflow-hidden h-full flex flex-col">
@@ -227,9 +227,6 @@ const EmailReport = () => {
                     <span className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${u.verdict === 'PHISHING' ? 'bg-[#892401] text-white' : 'bg-emerald-600 text-white'}`}>
                       {u.score}% {u.verdict}
                     </span>
-                    <a href="#" className="text-[10px] text-[#76767f] hover:text-white flex items-center gap-1 transition-colors">
-                      Deep Scan <span className="material-symbols-outlined text-[12px]">open_in_new</span>
-                    </a>
                   </div>
                   <p className={`text-[11px] font-mono truncate ${u.verdict === 'PHISHING' ? 'text-[#892401]' : 'text-emerald-500'}`} title={u.url}>
                     {u.url}
