@@ -292,16 +292,31 @@ async function _analyzeEmailUrls(emailContent) {
 
 // ── ML-Powered Email Scan ─────────────────────────────────────────────────────
 async function performEmailScan(emailContent, type, attachmentScore = 0, providedSender = "", enableAIDetection = false) {
-    // Parse subject and body from the combined string
+    // Parse From and Subject from the combined string
     let subject = '';
+    let sender = providedSender;
     let body = emailContent;
-    if (emailContent.startsWith('Subject:')) {
-        const parts = emailContent.split('\n\n');
-        subject = parts[0].replace(/^Subject:\s*/i, '').trim();
-        body = parts.slice(1).join('\n\n').trim();
+
+    let lines = emailContent.split('\n');
+    if (lines.length > 0 && lines[0].startsWith('From:')) {
+        sender = sender || lines[0].replace(/^From:\s*/i, '').trim();
+        lines = lines.slice(1);
+    }
+    if (lines.length > 0 && lines[0].startsWith('Subject:')) {
+        subject = lines[0].replace(/^Subject:\s*/i, '').trim();
+        lines = lines.slice(1);
+    }
+    // Remove blank line separator if present
+    if (lines.length > 0 && lines[0].trim() === '') {
+        lines = lines.slice(1);
+    }
+    body = lines.join('\n').trim();
+
+    if (!sender) {
+        sender = extractSender(emailContent) || "";
     }
 
-    const sender = providedSender || extractSender(emailContent) || "";
+    // sender is already extracted above
 
     // 1. Get ML-based analysis for individual URLs to pass into our Master Score
     const urlAnalysis = await _analyzeEmailUrls(emailContent);
@@ -451,4 +466,93 @@ async function performAttachmentScan(base64Data, fileName, skipVT = false) {
 function extractSender(emailContent) {
     const senderMatch = emailContent.match(/From:\s*(.+?)(?:\n|<)/i);
     return senderMatch ? senderMatch[1].trim() : null;
+}
+
+// ─── Layer 1: Auto-Scan Handler (Inbox Watcher) ─────────────────────────────
+// Receives sender/subject/snippet from the InboxWatcher in content.js,
+// runs the ML scan, and triggers alerts if phishing is detected.
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === 'autoScanEmail') {
+        const { sender: emailSender, subject, snippet } = request.data;
+
+        // Construct email content from available data
+        const emailContent = `From: ${emailSender}\nSubject: ${subject}\n\n${snippet}`;
+
+        // Run the scan in the background (fire-and-forget, no response needed)
+        _autoScanAndAlert(emailSender, subject, snippet, emailContent);
+        return false; // synchronous, no response needed
+    }
+});
+
+async function _autoScanAndAlert(emailSender, subject, snippet, emailContent) {
+    try {
+        console.log(`SafePhish AutoScan: Scanning "${subject}" from ${emailSender}…`);
+
+        const result = await performEmailScan(emailContent, 'auto', 0, emailSender, false);
+
+        if (result.error) {
+            console.warn('SafePhish AutoScan: Scan failed —', result.error);
+            return;
+        }
+
+        console.log(`SafePhish AutoScan: ✅ Result → isPhishing=${result.isPhishing}, confidence=${result.confidence}%, riskScore=${result.confidence}`);
+        console.log('SafePhish AutoScan: Full result →', JSON.stringify(result));
+
+        // Alert threshold matches server: phishing at >= 60
+        if (result.isPhishing && result.confidence >= 60) {
+            console.log('SafePhish AutoScan: 🚨 PHISHING DETECTED — triggering Chrome notification + SMTP alert…');
+
+            // 1. Chrome desktop notification
+            _showPhishingNotification(emailSender, subject, result.confidence);
+
+            // 2. SMTP alert email via backend
+            await _sendSmtpAlert(emailSender, subject, snippet, result);
+        } else {
+            console.log(`SafePhish AutoScan: ✅ Email appears safe (isPhishing=${result.isPhishing}, confidence=${result.confidence}%). No alert sent.`);
+        }
+    } catch (err) {
+        console.warn('SafePhish AutoScan: Error during scan —', err.message);
+    }
+}
+
+function _showPhishingNotification(emailSender, subject, confidence) {
+    try {
+        chrome.notifications.create(`safephish-alert-${Date.now()}`, {
+            type: 'basic',
+            iconUrl: 'favicon.svg',
+            title: '🚨 SafePhish: Phishing Email Detected!',
+            message: `From: ${emailSender}\nSubject: ${subject}\nRisk: ${confidence}%`,
+            priority: 2,
+            requireInteraction: true
+        });
+    } catch (err) {
+        console.warn('SafePhish: Could not show notification —', err.message);
+    }
+}
+
+async function _sendSmtpAlert(emailSender, subject, snippet, scanResult) {
+    try {
+        const response = await fetch(`${ML_SERVER}/alert/email`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                email_sender: emailSender,
+                email_subject: subject,
+                email_snippet: snippet,
+                risk_score: scanResult.confidence,
+                is_phishing: scanResult.isPhishing,
+                findings: scanResult.findings || [],
+                components: scanResult.components || {}
+            })
+        });
+
+        if (response.ok) {
+            console.log('SafePhish AutoScan: SMTP alert sent successfully.');
+        } else {
+            console.warn(`SafePhish AutoScan: SMTP alert failed (${response.status}).`);
+        }
+    } catch (err) {
+        console.warn('SafePhish AutoScan: Could not send SMTP alert —', err.message);
+    }
 }
