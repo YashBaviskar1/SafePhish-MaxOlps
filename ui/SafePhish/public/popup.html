@@ -31,13 +31,13 @@
                 <p>Checking...</p>
             </div>
 
-            <div id="urlResult" class="result-section hidden">
-                <div id="urlResultContent"></div>
-            </div>
-
-            <!-- Deceptive UI scan result banner -->
+            <!-- Deceptive UI scan result banner (moved above URL result) -->
             <div id="deceptiveResult" class="result-section hidden">
                 <div id="deceptiveResultContent"></div>
+            </div>
+
+            <div id="urlResult" class="result-section hidden">
+                <div id="urlResultContent"></div>
             </div>
 
             <div class="footer-link">
@@ -86,10 +86,10 @@
                     <h3>📎 Attachment Analysis</h3>
                     <div class="vt-toggle-wrap">
                         <label class="toggle-switch" title="Toggle VirusTotal integration (disable to save API calls)">
-                            <input type="checkbox" id="vtToggle" checked>
+                            <input type="checkbox" id="vtToggle">
                             <span class="toggle-slider"></span>
                         </label>
-                        <span class="toggle-label" id="vtToggleLabel">Sandbox + VT</span>
+                        <span class="toggle-label" id="vtToggleLabel">Sandbox Only</span>
                     </div>
                 </div>
                 <div id="attachmentInfo" class="hidden">

@@ -437,9 +437,19 @@ function extractAttachmentInfo() {
         });
     }
 
+    // Deduplicate attachments by name
+    const uniqueAttachments = [];
+    const seenNames = new Set();
+    for (const att of attachments) {
+        if (!seenNames.has(att.name)) {
+            uniqueAttachments.push(att);
+            seenNames.add(att.name);
+        }
+    }
+
     return {
-        hasAttachments: attachments.length > 0,
-        attachments,
+        hasAttachments: uniqueAttachments.length > 0,
+        attachments: uniqueAttachments,
     };
 }
 
@@ -473,10 +483,13 @@ async function _fetchGmailAttachment(index) {
         if (attachLinks.length === 0) {
             return { success: false, error: 'No downloadable attachments found. Try downloading manually.' };
         }
-        return await _downloadFromUrl(attachLinks[Math.min(index, attachLinks.length - 1)]);
+        const targetLink = attachLinks[Math.min(index, attachLinks.length - 1)];
+        if (!targetLink) return { success: false, error: 'Target attachment link not found' };
+        return await _downloadFromUrl(targetLink);
     }
 
     const el = downloadEls[Math.min(index, downloadEls.length - 1)];
+    if (!el) return { success: false, error: 'Attachment element not found' };
     const attr = el.getAttribute('download_url') || '';
     // Parse: "mime_type:filename:url"
     const colonIdx = attr.indexOf(':');
@@ -507,8 +520,9 @@ async function _fetchGmailAttachment(index) {
 }
 
 async function _downloadFromUrl(linkEl) {
+    if (!linkEl) return { success: false, error: 'Invalid attachment link' };
     const downloadUrl = linkEl.href;
-    const filename = linkEl.getAttribute('download') || linkEl.innerText?.trim() || 'attachment';
+    const filename = (linkEl.getAttribute && linkEl.getAttribute('download')) || linkEl.innerText?.trim() || 'attachment';
     try {
         const resp = await fetch(downloadUrl, { credentials: 'include' });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -535,10 +549,10 @@ async function _fetchOutlookAttachment(index) {
         return { success: false, error: 'No downloadable Outlook attachments found. Try downloading manually.' };
     }
     const link = downloadLinks[Math.min(index, downloadLinks.length - 1)];
-    if (link.href) {
+    if (link && link.href) {
         return await _downloadFromUrl(link);
     }
-    return { success: false, error: 'Outlook attachment links not accessible. Try downloading manually.' };
+    return { success: false, error: 'Outlook attachment links not found or inaccessible. Try downloading manually.' };
 }
 
 function _blobToBase64(blob) {

@@ -158,8 +158,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                 showExtractionStatus('📭 No email open — paste content above and click Scan.');
             }
         } else {
-            // Not an email platform — scan the current page URL
-            scanUrl();
+            console.log('SafePhish: Standard web page detected. Triggering sequential scan...');
+            // Trigger the sequential scan: Deceptive UI then Page URL
+            triggerDeceptiveScan(true).then(() => {
+                console.log('SafePhish: Deceptive scan finished. Now scanning main URL...');
+                scanUrl();
+            });
         }
     });
 
@@ -181,7 +185,7 @@ function setDeceptiveBtnsState(disabled, text) {
     });
 }
 
-async function triggerDeceptiveScan() {
+async function triggerDeceptiveScan(skipAutoScanHidden = false) {
     // If a URL scan is running, wait for it to finish first
     if (isUrlScanRunning) {
         setDeceptiveBtnsState(true, '⏳ Waiting…');
@@ -229,8 +233,8 @@ async function triggerDeceptiveScan() {
 
     showDeceptiveResult(result || { count: 0, urls: [] });
     
-    // Auto-scan the first hidden URL found
-    if (result && result.urls && result.urls.length > 0) {
+    // Auto-scan the first hidden URL found — only if not requested to skip
+    if (!skipAutoScanHidden && result && result.urls && result.urls.length > 0) {
         document.getElementById('email-tab').classList.add('hidden');
         document.getElementById('url-tab').classList.remove('hidden');
         document.getElementById('urlInput').value = result.urls[0];
@@ -340,6 +344,9 @@ async function scanEmail() {
         });
 
         displayEmailResult(result);
+
+        // Automatically trigger attachment scan after email scan is done
+        autoScanAttachmentsIfPresent();
     } catch (error) {
         console.error('Error scanning email:', error);
         displayEmailError('Error scanning email. Please try again.');
@@ -799,7 +806,8 @@ async function autoFetchAttachment(index = 0) {
             info.classList.remove('hidden');
             scanBtn.disabled = false;
 
-            fetchStatus.innerHTML = `<p class="fetch-success">✅ Fetched: ${escapeHtml(result.filename)}</p>`;
+            // Hide status text on success since selection info is already shown below
+            fetchStatus.classList.add('hidden');
         } else {
             const errMsg = result?.error || 'Unknown error';
             fetchStatus.innerHTML = `<p class="fetch-error">❌ ${escapeHtml(errMsg)}</p>`;
@@ -1006,3 +1014,37 @@ function displayAttachmentError(message) {
     resultDiv.classList.remove('hidden');
 }
 
+
+/**
+ * Helper: detect and scan first attachment automatically
+ */
+async function autoScanAttachmentsIfPresent() {
+    try {
+        console.log('SafePhish: Checking for attachments to auto-scan...');
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tab) return;
+
+        const response = await chrome.tabs.sendMessage(tab.id, { action: 'extractAttachmentInfo' });
+        if (response && response.hasAttachments && response.attachments.length > 0) {
+            console.log('SafePhish: Found attachments! Fetching first one:', response.attachments[0].name);
+            
+            // 1. Ensure the file tab UI is updated
+            await detectAttachmentsFromPage();
+            
+            // 2. Select the first one
+            await autoFetchAttachment(0);
+            
+            // 3. Trigger the scan (only if fetch succeeded)
+            if (selectedBase64 || selectedFile) {
+                console.log('SafePhish: Fetch successful. Starting attachment scan...');
+                await scanAttachment();
+            } else {
+                console.warn('SafePhish: Auto-fetch failed, skipping attachment scan.');
+            }
+        } else {
+            console.log('SafePhish: No attachments found to scan.');
+        }
+    } catch (e) {
+        console.warn('SafePhish: Auto-attachment scan skipped/failed:', e.message);
+    }
+}

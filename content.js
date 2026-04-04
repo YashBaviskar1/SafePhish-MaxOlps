@@ -18,7 +18,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         try {
             const subject = extractSubjectOnly();
             const emailData = extractEmailContent(); // Reuse extraction logic for sender
-            sendResponse({ 
+            sendResponse({
                 subject: subject,
                 sender: emailData.sender
             });
@@ -63,7 +63,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 document.addEventListener('dblclick', (event) => {
     // Only process if we are on a known email platform
     if (!isEmailPlatform()) return;
-    
+
     // Instead of opening popup right away (Manifest V3 restricts opening popups programmatically from content scripts),
     // we'll store the data in background script so it's ready when user clicks the extension manually
     // Or, we could just alert the user to click the extension. We'll store it.
@@ -74,7 +74,7 @@ document.addEventListener('dblclick', (event) => {
                 action: 'storeEmailData',
                 data: emailData
             });
-            
+
             // Visual feedback to the user
             showToast('📧 Email captured! Click the SafePhish icon to scan.');
         } catch (err) {
@@ -86,11 +86,11 @@ document.addEventListener('dblclick', (event) => {
 
 function isEmailPlatform() {
     const url = window.location.href;
-    return url.includes('mail.google.com') || 
-           url.includes('outlook.live.com') || 
-           url.includes('outlook.office.com') ||
-           url.includes('mail.yahoo.com') ||
-           url.includes('mail.proton.me');
+    return url.includes('mail.google.com') ||
+        url.includes('outlook.live.com') ||
+        url.includes('outlook.office.com') ||
+        url.includes('mail.yahoo.com') ||
+        url.includes('mail.proton.me');
 }
 
 function extractEmailContent(targetNode = null) {
@@ -98,7 +98,7 @@ function extractEmailContent(targetNode = null) {
     let sender = '';
     let subject = '';
     let body = '';
-    
+
     // Gmail
     if (url.includes('mail.google.com')) {
         // Try to find the active message subject and sender
@@ -107,10 +107,10 @@ function extractEmailContent(targetNode = null) {
         const subjectElement = document.querySelector('h2.hP');
         // Find visible message bodies
         const bodies = document.querySelectorAll('.a3s.aiL'); // Specifically targets the body within Gmail's container
-        
+
         sender = senderElement ? (senderElement.getAttribute('email') || senderElement.innerText) : '';
         subject = subjectElement ? subjectElement.innerText : '';
-        
+
         if (bodies && bodies.length > 0) {
             // Updated: Take the FIRST one (original message) instead of the last one
             // This ensures consistency with the sender and subject info fetched above.
@@ -133,19 +133,19 @@ function extractEmailContent(targetNode = null) {
                 body = fallbackBody.innerText;
             }
         }
-    } 
+    }
     // Outlook
     else if (url.includes('outlook.live.com') || url.includes('outlook.office.com')) {
         const senderElement = document.querySelector('[data-testid="AddressBlock"] .ms-Persona-primaryText') || document.querySelector('[aria-label="Message Header"] [title*="@"]');
-        const subjectElement = document.querySelector('[aria-label="Message Header"]') || 
-                               document.querySelector('[data-testid="SubjectRead"]') ||
-                               document.querySelector('.ms-Pivot-content');
-                               
+        const subjectElement = document.querySelector('[aria-label="Message Header"]') ||
+            document.querySelector('[data-testid="SubjectRead"]') ||
+            document.querySelector('.ms-Pivot-content');
+
         const readingPane = document.querySelector('[aria-label="Reading Pane"]') ||
-                            document.querySelector('[aria-label="Message body"]') ||
-                            document.querySelector('div[data-testid="ReadingPane"]') ||
-                            document.querySelector('.customScrollBar');
-        
+            document.querySelector('[aria-label="Message body"]') ||
+            document.querySelector('div[data-testid="ReadingPane"]') ||
+            document.querySelector('.customScrollBar');
+
         if (senderElement) {
             sender = senderElement.getAttribute('title') || senderElement.innerText;
         }
@@ -154,7 +154,7 @@ function extractEmailContent(targetNode = null) {
         }
         if (readingPane) body = readingPane.innerText;
     }
-    
+
     // Generic fallback for any email platform
     if (!body) {
         const mainContent = document.querySelector('[role="main"]') || document.querySelector('main');
@@ -226,15 +226,15 @@ function extractSubjectOnly() {
         subject = el ? el.innerText.trim() : '';
     } else if (url.includes('outlook.live.com') || url.includes('outlook.office.com')) {
         const el = document.querySelector('[data-testid="SubjectRead"]') ||
-                   document.querySelector('[aria-label="Message Header"]');
+            document.querySelector('[aria-label="Message Header"]');
         subject = el ? el.innerText.split('\n')[0].trim() : '';
     } else if (url.includes('mail.yahoo.com')) {
         const el = document.querySelector('[data-test-id="message-subject"]') ||
-                   document.querySelector('h1');
+            document.querySelector('h1');
         subject = el ? el.innerText.trim() : '';
     } else if (url.includes('mail.proton.me')) {
         const el = document.querySelector('h1') ||
-                   document.querySelector('[data-testid="message-header:subject"]');
+            document.querySelector('[data-testid="message-header:subject"]');
         subject = el ? el.innerText.trim() : '';
     }
 
@@ -253,7 +253,7 @@ function detectDeceptiveUI() {
 
     const flag = (el, reason) => {
         deceptiveCount++;
-        
+
         if (el.tagName.toLowerCase() === 'a' && el.hasAttribute('href')) {
             foundUrls.add(el.href);
         } else if (el.hasAttribute('onclick')) {
@@ -263,9 +263,9 @@ function detectDeceptiveUI() {
 
         el.dataset.safephishFlagged = 'true';
 
-        el.style.setProperty('outline',           '3px dashed #ef4444', 'important');
-        el.style.setProperty('outline-offset',    '3px',                'important');
-        el.style.setProperty('background-color',  'rgba(239,68,68,0.12)', 'important');
+        el.style.setProperty('outline', '3px dashed #ef4444', 'important');
+        el.style.setProperty('outline-offset', '3px', 'important');
+        el.style.setProperty('background-color', 'rgba(239,68,68,0.12)', 'important');
         el.title = `\u26a0\ufe0f SafePhish: ${reason}`;
 
         const badge = document.createElement('span');
@@ -290,36 +290,36 @@ function detectDeceptiveUI() {
         if (cs.position === 'static') {
             el.style.setProperty('position', 'relative', 'important');
         }
-        try { el.appendChild(badge); } catch (_) {}
+        try { el.appendChild(badge); } catch (_) { }
     };
 
     clickableElements.forEach(el => {
         if (el.dataset.safephishFlagged) return;
 
-        const cs   = window.getComputedStyle(el);
+        const cs = window.getComputedStyle(el);
         const rect = el.getBoundingClientRect();
 
         // Skip layout-invisible elements
         if (cs.display === 'none' || cs.visibility === 'hidden') return;
         if (rect.width < 1 || rect.height < 1) return;
 
-        const opacity    = parseFloat(cs.opacity);
-        const hasText    = (el.innerText || el.textContent || '').trim().length > 0;
-        const tag        = el.tagName.toLowerCase();
-        const isAnchor   = tag === 'a';
-        const isButton   = tag === 'button';
+        const opacity = parseFloat(cs.opacity);
+        const hasText = (el.innerText || el.textContent || '').trim().length > 0;
+        const tag = el.tagName.toLowerCase();
+        const isAnchor = tag === 'a';
+        const isButton = tag === 'button';
         const hasOnclick = el.hasAttribute('onclick');
 
         // textDecoration: Chrome returns shorthand like "none solid rgb(0,0,0)"
-        const tdFull    = cs.textDecoration     || '';
-        const tdLine    = cs.textDecorationLine || '';
+        const tdFull = cs.textDecoration || '';
+        const tdLine = cs.textDecorationLine || '';
         const hasUnderline = tdFull.includes('underline') || tdLine.includes('underline');
 
-        const cursor     = cs.cursor;
-        const isPointer  = cursor === 'pointer';
+        const cursor = cs.cursor;
+        const isPointer = cursor === 'pointer';
         const isTextlike = cursor === 'text' || cursor === 'default' || cursor === 'auto';
 
-        const elBg      = cs.backgroundColor;
+        const elBg = cs.backgroundColor;
         const isTransBg = elBg === 'rgba(0, 0, 0, 0)' || elBg === 'transparent';
 
         // ---------------------------------------------------------------
@@ -337,10 +337,10 @@ function detectDeceptiveUI() {
         //   Allow it only if it clearly looks like a styled button
         // ---------------------------------------------------------------
         if (isAnchor && el.hasAttribute('href') && hasText && !hasUnderline) {
-            const hasPadding    = parseFloat(cs.paddingTop) > 4 || parseFloat(cs.paddingLeft) > 8;
-            const hasBorder     = parseFloat(cs.borderWidth) > 0 && cs.borderStyle !== 'none';
+            const hasPadding = parseFloat(cs.paddingTop) > 4 || parseFloat(cs.paddingLeft) > 8;
+            const hasBorder = parseFloat(cs.borderWidth) > 0 && cs.borderStyle !== 'none';
             const hasExplicitBg = !isTransBg;
-            const looksLikeBtn  = hasPadding && (hasBorder || hasExplicitBg);
+            const looksLikeBtn = hasPadding && (hasBorder || hasExplicitBg);
 
             if (!looksLikeBtn) {
                 flag(el, 'Link disguised as plain text');
@@ -592,10 +592,10 @@ function showToast(message) {
         `;
         document.body.appendChild(toast);
     }
-    
+
     toast.textContent = message;
     toast.style.opacity = '1';
-    
+
     setTimeout(() => {
         toast.style.opacity = '0';
     }, 3000);

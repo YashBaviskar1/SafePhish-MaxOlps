@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SafePhish - Phishing Detector</title>
     <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
     <div class="container">
         <!-- URL Scanner Tab -->
@@ -13,11 +15,12 @@
             <div class="header">
                 <h1>SafePhish</h1>
                 <!-- 🕵️ Scan Page button — top-right corner of the popup -->
-                <button id="scanDeceptiveBtn" class="btn-deceptive" title="Scan this page for hidden/deceptive clickable elements">
+                <button id="scanDeceptiveBtn" class="btn-deceptive"
+                    title="Scan this page for hidden/deceptive clickable elements">
                     Scan Page
                 </button>
             </div>
-            
+
             <div class="input-section">
                 <input type="text" id="urlInput" placeholder="Paste URL here..." class="input-field">
                 <button id="scanUrlBtn" class="btn btn-primary">Check URL</button>
@@ -46,14 +49,16 @@
             <div class="header">
                 <h1>SafePhish</h1>
                 <!-- 🕵️ Scan Page button on email tab too -->
-                <button id="scanDeceptiveBtnEmail" class="btn-deceptive" title="Scan this page for hidden/deceptive clickable elements">
+                <button id="scanDeceptiveBtnEmail" class="btn-deceptive"
+                    title="Scan this page for hidden/deceptive clickable elements">
                     Scan Page
                 </button>
                 <p class="subtitle">Email Scanner</p>
             </div>
 
             <div class="input-section">
-                <input type="text" id="emailSender" placeholder="Sender Email (e.g. alerts@company.com)..." class="input-field">
+                <input type="text" id="emailSender" placeholder="Sender Email (e.g. alerts@company.com)..."
+                    class="input-field">
                 <input type="text" id="emailSubject" placeholder="Email Subject..." class="input-field">
                 <textarea id="emailBody" placeholder="Email Body..." class="input-field textarea-field"></textarea>
                 <div class="engine-toggles">
@@ -108,7 +113,8 @@
                     <span id="selectedFileName"></span>
                     <button id="clearFileBtn" class="btn-clear">✕</button>
                 </div>
-                <button id="scanAttachmentBtn" class="btn btn-primary btn-attachment" disabled>🔬 Scan Attachment</button>
+                <button id="scanAttachmentBtn" class="btn btn-primary btn-attachment" disabled>🔬 Scan
+                    Attachment</button>
                 <div id="attachmentLoading" class="loading hidden">
                     <p>🔬 Running layered analysis…</p>
                     <p class="loading-detail" id="loadingLayerText">Docker Sandbox → VirusTotal Hash → Detonation</p>
@@ -126,4 +132,5 @@
 
     <script src="popup.js"></script>
 </body>
+
 </html>
