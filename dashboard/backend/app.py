@@ -3,6 +3,9 @@ import sqlite3
 import json
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.decomposition import PCA
+from sklearn.cluster import KMeans
 
 app = Flask(__name__)
 CORS(app)
@@ -62,6 +65,60 @@ def get_stats():
             "phishing_detected": phishing,
             "legitimate_detected": legit
         })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/clusters", methods=["GET"])
+def get_clusters():
+    """Returns clustered campaigns using TF-IDF, PCA, and KMeans."""
+    try:
+        conn = get_db_connection()
+        scans = conn.execute('SELECT id, scan_type, target, is_phishing, confidence, timestamp, full_data FROM analysis_logs').fetchall()
+        conn.close()
+        
+        if not scans:
+            return jsonify({"clusters": []})
+            
+        texts = []
+        meta = []
+        for row in scans:
+            text_features = str(row['target']) + " " + str(row['full_data'])
+            texts.append(text_features)
+            meta.append({
+                "id": row['id'],
+                "target": row['target'],
+                "scan_type": row['scan_type'],
+                "is_phishing": row['is_phishing'],
+                "confidence": row['confidence'],
+                "timestamp": row['timestamp']
+            })
+            
+        if len(texts) < 3:
+            for i, m in enumerate(meta):
+                m['x'] = i * 10.0
+                m['y'] = i * 10.0
+                m['cluster'] = 0
+            return jsonify({"clusters": meta})
+            
+        # Extract features
+        vectorizer = TfidfVectorizer(max_features=100, stop_words='english')
+        X_tfidf = vectorizer.fit_transform(texts).toarray()
+        
+        # Reduce to 2D for visualization
+        pca = PCA(n_components=2)
+        X_2d = pca.fit_transform(X_tfidf)
+        
+        # Cluster
+        n_clusters = min(4, len(texts))
+        kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init='auto')
+        clusters = kmeans.fit_predict(X_tfidf)
+        
+        for i, m in enumerate(meta):
+            m['x'] = float(X_2d[i][0])
+            m['y'] = float(X_2d[i][1])
+            m['cluster'] = int(clusters[i])
+            
+        return jsonify({"clusters": meta})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
