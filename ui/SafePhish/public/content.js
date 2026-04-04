@@ -437,9 +437,19 @@ function extractAttachmentInfo() {
         });
     }
 
+    // Deduplicate attachments by name
+    const uniqueAttachments = [];
+    const seenNames = new Set();
+    for (const att of attachments) {
+        if (!seenNames.has(att.name)) {
+            uniqueAttachments.push(att);
+            seenNames.add(att.name);
+        }
+    }
+
     return {
-        hasAttachments: attachments.length > 0,
-        attachments,
+        hasAttachments: uniqueAttachments.length > 0,
+        attachments: uniqueAttachments,
     };
 }
 
@@ -473,10 +483,13 @@ async function _fetchGmailAttachment(index) {
         if (attachLinks.length === 0) {
             return { success: false, error: 'No downloadable attachments found. Try downloading manually.' };
         }
-        return await _downloadFromUrl(attachLinks[Math.min(index, attachLinks.length - 1)]);
+        const targetLink = attachLinks[Math.min(index, attachLinks.length - 1)];
+        if (!targetLink) return { success: false, error: 'Target attachment link not found' };
+        return await _downloadFromUrl(targetLink);
     }
 
     const el = downloadEls[Math.min(index, downloadEls.length - 1)];
+    if (!el) return { success: false, error: 'Attachment element not found' };
     const attr = el.getAttribute('download_url') || '';
     // Parse: "mime_type:filename:url"
     const colonIdx = attr.indexOf(':');
@@ -507,8 +520,9 @@ async function _fetchGmailAttachment(index) {
 }
 
 async function _downloadFromUrl(linkEl) {
+    if (!linkEl) return { success: false, error: 'Invalid attachment link' };
     const downloadUrl = linkEl.href;
-    const filename = linkEl.getAttribute('download') || linkEl.innerText?.trim() || 'attachment';
+    const filename = (linkEl.getAttribute && linkEl.getAttribute('download')) || linkEl.innerText?.trim() || 'attachment';
     try {
         const resp = await fetch(downloadUrl, { credentials: 'include' });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -535,10 +549,10 @@ async function _fetchOutlookAttachment(index) {
         return { success: false, error: 'No downloadable Outlook attachments found. Try downloading manually.' };
     }
     const link = downloadLinks[Math.min(index, downloadLinks.length - 1)];
-    if (link.href) {
+    if (link && link.href) {
         return await _downloadFromUrl(link);
     }
-    return { success: false, error: 'Outlook attachment links not accessible. Try downloading manually.' };
+    return { success: false, error: 'Outlook attachment links not found or inaccessible. Try downloading manually.' };
 }
 
 function _blobToBase64(blob) {
@@ -600,3 +614,247 @@ function showToast(message) {
         toast.style.opacity = '0';
     }, 3000);
 }
+
+// ─── Layer 1: Inbox Auto-Scan (New Email Detection) ─────────────────────────
+// Polls the inbox DOM every 15 seconds for email rows. Tracks which emails
+// have already been scanned by sender+subject hash. Only NEW emails are
+// sent to the background for ML phishing analysis + SMTP alerts.
+
+class InboxWatcher {
+    constructor() {
+        this.seenHashes = new Set();
+        this.pollTimer = null;
+        this.isFirstScan = true; // Skip alerting on the very first scan (existing emails)
+        this.POLL_INTERVAL = 15000; // 15 seconds
+    }
+
+    start() {
+        if (!isEmailPlatform()) return;
+        console.log('SafePhish InboxWatcher: Starting inbox polling…');
+
+        // Wait for inbox to load, then begin polling
+        this._waitForInbox();
+    }
+
+    _waitForInbox() {
+        let attempts = 0;
+        const check = setInterval(() => {
+            attempts++;
+            const rows = this._getInboxRows();
+            if (rows.length > 0) {
+                clearInterval(check);
+                console.log(`SafePhish InboxWatcher: Inbox found with ${rows.length} rows. Starting poll cycle.`);
+                this._poll(); // Run first scan immediately
+                this.pollTimer = setInterval(() => this._poll(), this.POLL_INTERVAL);
+            } else if (attempts > 30) {
+                clearInterval(check);
+                console.warn('SafePhish InboxWatcher: Could not find inbox rows after 60s.');
+            }
+        }, 2000);
+    }
+
+    _getInboxRows() {
+        const url = window.location.href;
+
+        if (url.includes('mail.google.com')) {
+            // Gmail: each email row is a <tr> inside the main content area
+            // Use broad selector: all table rows inside role="main" that look like email rows
+            const mainArea = document.querySelector('div[role="main"]');
+            if (!mainArea) return [];
+            const rows = mainArea.querySelectorAll('tr');
+            // Filter: only rows that contain actual email content (have enough cells/text)
+            return Array.from(rows).filter(row => {
+                const text = (row.innerText || '').trim();
+                return text.length > 20 && row.querySelectorAll('td').length >= 2;
+            });
+        }
+
+        if (url.includes('outlook.live.com') || url.includes('outlook.office.com')) {
+            return Array.from(document.querySelectorAll('[role="list"] [role="listitem"], [role="option"]'));
+        }
+
+        if (url.includes('mail.yahoo.com')) {
+            return Array.from(document.querySelectorAll('[data-test-id="message-list-item"], ul[role="list"] li'));
+        }
+
+        return [];
+    }
+
+    _poll() {
+        const rows = this._getInboxRows();
+        if (rows.length === 0) return;
+
+        let newCount = 0;
+
+        for (const row of rows) {
+            const parsed = this._parseRow(row);
+            if (!parsed || (!parsed.sender && !parsed.subject)) continue;
+
+            // Create a stable identifier for this email
+            const hashInput = (parsed.sender + '|' + parsed.subject).substring(0, 200);
+            const hash = this._simpleHash(hashInput);
+
+            if (this.seenHashes.has(hash)) continue;
+            this.seenHashes.add(hash);
+
+            // On first scan, just catalog existing emails — don't send alerts
+            if (this.isFirstScan) continue;
+
+            newCount++;
+            console.log(`SafePhish InboxWatcher: 🆕 New email detected → "${parsed.subject}" from ${parsed.sender}`);
+
+            try {
+                chrome.runtime.sendMessage({
+                    action: 'autoScanEmail',
+                    data: {
+                        sender: parsed.sender,
+                        subject: parsed.subject,
+                        snippet: parsed.snippet
+                    }
+                });
+            } catch (err) {
+                console.warn('SafePhish InboxWatcher: Could not send to background.', err);
+            }
+        }
+
+        if (this.isFirstScan) {
+            console.log(`SafePhish InboxWatcher: Initial scan cataloged ${this.seenHashes.size} existing emails. Watching for new ones…`);
+            this.isFirstScan = false;
+        } else if (newCount > 0) {
+            console.log(`SafePhish InboxWatcher: Sent ${newCount} new email(s) for scanning.`);
+            showToast(`🔍 SafePhish: Auto-scanning ${newCount} new email(s)…`);
+        }
+
+        // Keep set manageable
+        if (this.seenHashes.size > 1000) {
+            const iter = this.seenHashes.values();
+            for (let i = 0; i < 200; i++) iter.next();
+            // Remove oldest 200 entries
+            const entries = Array.from(this.seenHashes);
+            this.seenHashes = new Set(entries.slice(200));
+        }
+    }
+
+    _parseRow(row) {
+        const url = window.location.href;
+        if (url.includes('mail.google.com')) return this._parseGmailRow(row);
+        if (url.includes('outlook.live.com') || url.includes('outlook.office.com')) return this._parseOutlookRow(row);
+        if (url.includes('mail.yahoo.com')) return this._parseYahooRow(row);
+        return null;
+    }
+
+    _parseGmailRow(row) {
+        // Strategy: Parse the row's inner text which typically looks like:
+        // "SenderName  Subject — Snippet preview text  Time"
+        // Also try to find spans with [email] attribute for sender email
+        let sender = '';
+        let subject = '';
+        let snippet = '';
+
+        // Try to get sender email from [email] attribute (most reliable)
+        const emailSpan = row.querySelector('span[email]');
+        if (emailSpan) {
+            sender = emailSpan.getAttribute('email') || emailSpan.getAttribute('name') || emailSpan.innerText || '';
+            sender = sender.trim();
+        }
+
+        // Get the full row text and try to parse subject + snippet
+        const cells = row.querySelectorAll('td');
+        if (cells.length >= 4) {
+            // Gmail typically: checkbox | star | sender | subject+snippet | date
+            // Sender cell (usually 3rd or 4th td)
+            if (!sender) {
+                const senderCell = cells[2] || cells[1];
+                sender = (senderCell.innerText || '').split('\n')[0].trim();
+            }
+
+            // Subject+snippet cell (usually the widest one)
+            for (const cell of cells) {
+                const text = (cell.innerText || '').trim();
+                // The subject/snippet cell is usually the longest
+                if (text.length > 30 && !text.includes('@') && text !== sender) {
+                    // Split by " — " or " - " which separates subject from snippet in Gmail
+                    const dashMatch = text.match(/^(.+?)\s*[—–-]\s*(.+)$/);
+                    if (dashMatch) {
+                        subject = dashMatch[1].trim();
+                        snippet = dashMatch[2].trim();
+                    } else {
+                        subject = text.substring(0, 100);
+                        snippet = text.substring(100, 300);
+                    }
+                    break;
+                }
+            }
+        }
+
+        // Fallback: just use the entire row text
+        if (!sender && !subject) {
+            const allText = (row.innerText || '').trim();
+            if (allText.length > 10) {
+                const lines = allText.split('\n').filter(l => l.trim().length > 0);
+                sender = lines[0] || '';
+                subject = lines[1] || '';
+                snippet = lines.slice(2).join(' ').substring(0, 200);
+            }
+        }
+
+        if (!sender && !subject) return null;
+        return { sender, subject, snippet };
+    }
+
+    _parseOutlookRow(item) {
+        const senderEl = item.querySelector('[data-testid="AvatarText"]') ||
+                         item.querySelector('span[title]');
+        const subjectEl = item.querySelector('[data-testid="SubjectLine"]');
+        const snippetEl = item.querySelector('[data-testid="PreviewText"]');
+
+        // Fallback: parse from innerText
+        let sender = senderEl ? (senderEl.getAttribute('title') || senderEl.innerText || '').trim() : '';
+        let subject = subjectEl ? subjectEl.innerText.trim() : '';
+        let snippet = snippetEl ? snippetEl.innerText.trim() : '';
+
+        if (!sender && !subject) {
+            const text = (item.innerText || '').trim();
+            const lines = text.split('\n').filter(l => l.trim());
+            sender = lines[0] || '';
+            subject = lines[1] || '';
+            snippet = lines.slice(2).join(' ').substring(0, 200);
+        }
+
+        return { sender, subject, snippet };
+    }
+
+    _parseYahooRow(item) {
+        const senderEl = item.querySelector('[data-test-id="senders"]');
+        const subjectEl = item.querySelector('[data-test-id="message-subject"]');
+        const snippetEl = item.querySelector('[data-test-id="message-preview"]');
+
+        let sender = senderEl ? senderEl.innerText.trim() : '';
+        let subject = subjectEl ? subjectEl.innerText.trim() : '';
+        let snippet = snippetEl ? snippetEl.innerText.trim() : '';
+
+        if (!sender && !subject) {
+            const text = (item.innerText || '').trim();
+            const lines = text.split('\n').filter(l => l.trim());
+            sender = lines[0] || '';
+            subject = lines[1] || '';
+            snippet = lines.slice(2).join(' ').substring(0, 200);
+        }
+
+        return { sender, subject, snippet };
+    }
+
+    _simpleHash(str) {
+        // Simple string hash — fast, no crypto needed
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            const char = str.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash; // Convert to 32bit integer
+        }
+        return hash.toString(36);
+    }
+}
+
+// Auto-start the InboxWatcher
+new InboxWatcher().start();

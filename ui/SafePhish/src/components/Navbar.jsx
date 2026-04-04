@@ -23,11 +23,6 @@ const Navbar = ({ currentPage }) => {
             className="bg-[#76767f]/10 border border-[#76767f]/30 rounded-lg text-xs pl-10 pr-4 py-2 w-64 focus:outline-none focus:border-[#aab3d8] text-[#aab3d8] transition-all"
           />
         </div>
-        <div className="flex items-center gap-4 text-[#76767f]">
-          <button className="hover:text-[#aab3d8] hover:bg-[#76767f]/10 p-2 rounded-lg transition-all duration-300">
-            <span className="material-symbols-outlined">notifications</span>
-          </button>
-        </div>
       </div>
     </header>
   );

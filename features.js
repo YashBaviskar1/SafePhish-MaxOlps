@@ -64,43 +64,107 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Render Feature Grid
         const grid = document.getElementById('featureGrid');
-        grid.innerHTML = ''; // Clear loading state
+        if (grid) {
+            grid.innerHTML = ''; // Clear loading state
 
-        const features = report.features || {};
-        
-        // Sort features so that Dangerous ones (-1) come first
-        const sortedFeatureNames = Object.keys(FEATURE_DESCRIPTIONS).sort((a, b) => {
-            const valA = features[a] === undefined ? 0 : features[a];
-            const valB = features[b] === undefined ? 0 : features[b];
-            return valA - valB; // -1 < 0 < 1
-        });
-
-        sortedFeatureNames.forEach(name => {
-            const val = features[name] === undefined ? 0 : features[name];
-            let statusClass = 'neutral';
-            let statusText = 'Suspicious';
+            const features = report.features || {};
             
-            if (val === 1) {
-                statusClass = 'safe';
-                statusText = 'Safe';
-            } else if (val === -1) {
-                statusClass = 'dangerous';
-                statusText = 'Danger';
-            }
+            // Sort features so that Dangerous ones (-1) come first
+            const sortedFeatureNames = Object.keys(FEATURE_DESCRIPTIONS).sort((a, b) => {
+                const valA = features[a] === undefined ? 0 : features[a];
+                const valB = features[b] === undefined ? 0 : features[b];
+                return valA - valB; // -1 < 0 < 1
+            });
 
-            const card = document.createElement('div');
-            card.className = `feature-card ${statusClass}`;
-            card.innerHTML = `
-                <div class="feature-header">
-                    <span class="feature-name">${name}</span>
-                    <span class="feature-status-label">${statusText}</span>
-                </div>
-                <div class="feature-desc">${FEATURE_DESCRIPTIONS[name]}</div>
-                <div style="font-size: 0.65rem; color: var(--text-muted); margin-top: 10px; opacity: 0.7;">
-                    ML Signal Value: ${val}
-                </div>
-            `;
-            grid.appendChild(card);
-        });
+            sortedFeatureNames.forEach(name => {
+                const val = features[name] === undefined ? 0 : features[name];
+                let statusClass = 'neutral';
+                let statusText = 'Suspicious';
+                
+                if (val === 1) {
+                    statusClass = 'safe';
+                    statusText = 'Safe';
+                } else if (val === -1) {
+                    statusClass = 'dangerous';
+                    statusText = 'Danger';
+                }
+
+                const card = document.createElement('div');
+                card.className = `feature-card ${statusClass}`;
+                card.innerHTML = `
+                    <div class="feature-header">
+                        <span class="feature-name">${name}</span>
+                        <span class="feature-status-label">${statusText}</span>
+                    </div>
+                    <div class="feature-desc">${FEATURE_DESCRIPTIONS[name]}</div>
+                    <div style="font-size: 0.65rem; color: var(--text-muted); margin-top: 10px; opacity: 0.7;">
+                        ML Signal Value: ${val}
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        // Render Explainability Drivers
+        try {
+            renderExplainabilityDrivers(report);
+        } catch (err) {
+            console.error('Error rendering explainability drivers:', err);
+            const container = document.getElementById('driversContainer');
+            if (container) {
+                container.innerHTML = `<div class="no-drivers-msg">Error loading drivers: ${err.message}</div>`;
+            }
+        }
     });
 });
+
+function renderExplainabilityDrivers(report) {
+    const container = document.getElementById('driversContainer');
+    if (!container) return;
+
+    const drivers = report.topFeatures || [];
+    const features = report.features || {};
+
+    if (drivers.length === 0) {
+        container.innerHTML = '<div class="no-drivers-msg">Explainability data not available for this scan.</div>';
+        return;
+    }
+
+    container.innerHTML = ''; // Clear loading state
+
+    drivers.forEach((driver, index) => {
+        const name = driver.feature;
+        const score = driver.score;
+        const val = features[name] === undefined ? 0 : features[name];
+        
+        // Determine if it was a "Safe" or "Risky" contributor
+        // In our XGBoost setup, negative scores push toward Phishing (class -1)
+        // and positive scores push toward Legitimate (class 1).
+        const isRisky = score < 0; 
+        const statusClass = isRisky ? 'risky-contributor' : 'safe-contributor';
+        const impactText = isRisky ? '🚨 High Risk Impact' : '🛡️ Safe Indicator';
+        
+        // Human-friendly explanation
+        let explanation = FEATURE_DESCRIPTIONS[name] || "Analyzing this feature's impact on the overall security verdict.";
+        if (isRisky) {
+            explanation = `This feature showed a strong correlation with phishing patterns. ${explanation}`;
+        } else {
+            explanation = `This feature showed characteristics common in legitimate websites. ${explanation}`;
+        }
+
+        const card = document.createElement('div');
+        card.className = `driver-card ${statusClass}`;
+        card.innerHTML = `
+            <div class="driver-rank">#${index + 1}</div>
+            <div class="driver-info">
+                <span class="driver-name">${name}</span>
+                <span class="driver-impact-badge">${impactText}</span>
+            </div>
+            <div class="driver-explanation">${explanation}</div>
+            <div style="margin-top: auto; font-size: 0.7rem; color: var(--text-muted); opacity: 0.6; font-weight: 600;">
+                Impact Magnitude: ${Math.abs(score).toFixed(4)}
+            </div>
+        `;
+        container.appendChild(card);
+    });
+}

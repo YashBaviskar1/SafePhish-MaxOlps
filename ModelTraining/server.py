@@ -18,6 +18,7 @@ import time
 import numpy as np
 import requests as http_requests
 import re
+import xgboost as xgb
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -84,6 +85,58 @@ URL_FEATURE_ORDER = [
     "StatsReport",
 ]
 
+def calculate_top_features(model, features_dict):
+    """
+    Calculates local feature importance (contributions) using XGBoost's built-in pred_contribs.
+    Returns the top 8 features that influenced the result.
+    """
+    try:
+        # Build vector in correct order
+        vector = [features_dict.get(f, 0) for f in URL_FEATURE_ORDER]
+        X = np.array([vector], dtype=float)
+        
+        # Get contributions (SHAP-like values from XGBoost)
+        if hasattr(model, "get_booster"):
+            booster = model.get_booster()
+        else:
+            booster = model
+            
+        # booster.predict returns contributions if pred_contribs=True
+        dmat = xgb.DMatrix(X, feature_names=URL_FEATURE_ORDER)
+        contribs = booster.predict(dmat, pred_contribs=True)
+        
+        # Handle different output shapes (binary vs multiclass)
+        if len(contribs.shape) == 2:
+            # Binary: shape is (1, num_features + 1)
+            raw_scores = contribs[0]
+        elif len(contribs.shape) == 3:
+            # Multiclass: shape is (1, num_classes, num_features + 1)
+            # We take the first class's contributions (usually class 0 or class -1)
+            raw_scores = contribs[0][0]
+        else:
+            raw_scores = contribs.flatten()
+
+        # Map back to feature names (excluding bias)
+        feature_contribs = []
+        for i, name in enumerate(URL_FEATURE_ORDER):
+            if i < len(raw_scores):
+                score = float(raw_scores[i])
+                feature_contribs.append({
+                    "feature": name,
+                    "score": round(score, 4),
+                    "abs_score": abs(score)
+                })
+            
+        # Sort by absolute score descending and take top 4
+        top_4 = sorted(feature_contribs, key=lambda x: x["abs_score"], reverse=True)[:4]
+        
+        return [{"feature": x["feature"], "score": x["score"]} for x in top_4]
+        
+    except Exception as e:
+        print(f"⚠️ Error calculating explainability: {e}")
+        traceback.print_exc()
+        return []
+
 # ─── Endpoints ────────────────────────────────────────────────────────────────
 
 @app.route("/health", methods=["GET"])
@@ -133,12 +186,16 @@ def predict_url():
         phish_prob  = float(proba[phish_idx])
         is_phishing = phish_prob >= 0.5
 
+        # Calculate explainability (Top 8 Drivers)
+        top_features = calculate_top_features(url_model, features)
+
         return jsonify({
             "isPhishing": is_phishing,
             "confidence": round(phish_prob * 100 if is_phishing else (1 - phish_prob) * 100, 1),
             "phishingProbability": round(phish_prob * 100, 1),
             "label": "PHISHING" if is_phishing else "LEGITIMATE",
-            "features": features
+            "features": features,
+            "topFeatures": top_features
         })
 
     except Exception as e:
@@ -580,7 +637,7 @@ def analyze_email_full():
             
         # Cap at 100 and round it cleanly
         final_risk_score = min(round(final_risk_score), 100)
-        is_phishing = final_risk_score >= 50
+        is_phishing = final_risk_score >= 60
 
         # --- STAGE 5: Explainability (Gathering Findings) ---
         all_findings = []
@@ -621,7 +678,101 @@ def analyze_email_full():
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
+# ── SMTP Alert Endpoint (Auto-Scan Phishing Alerts) ───────────────────────────
+
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from datetime import datetime
+
+SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
+SMTP_USER = os.environ.get("SMTP_USER", "")
+SMTP_PASS = os.environ.get("SMTP_PASS", "")
+ALERT_FROM_EMAIL = os.environ.get("ALERT_FROM_EMAIL", SMTP_USER)
+ALERT_TO_EMAIL = os.environ.get("ALERT_TO_EMAIL", "")
+
+
+@app.route("/alert/email", methods=["POST"])
+def send_alert_email():
+    """
+    Send an SMTP alert email when the auto-scan detects phishing.
+    Expects JSON: { email_sender, email_subject, email_snippet, risk_score, findings, components }
+    """
+    try:
+        data = request.get_json(force=True)
+        email_sender = data.get("email_sender", "Unknown")
+        email_subject = data.get("email_subject", "No Subject")
+        email_snippet = data.get("email_snippet", "")
+        risk_score = data.get("risk_score", 0)
+        findings = data.get("findings", [])
+        components = data.get("components", {})
+
+        if not SMTP_USER or not SMTP_PASS or not ALERT_TO_EMAIL:
+            print("⚠️  SMTP not configured — skipping alert email.")
+            return jsonify({"success": False, "reason": "SMTP not configured. Set SMTP_USER, SMTP_PASS, and ALERT_TO_EMAIL in .env"}), 200
+
+        # Build HTML email body
+        findings_html = "".join(f"<li>{f}</li>" for f in findings) if findings else "<li>No specific findings</li>"
+        components_html = ""
+        if components:
+            for key, value in components.items():
+                label = key.replace("Score", " Score").replace("ml", "ML").replace("url", "URL").replace("context", "Context").replace("behavior", "Behavior").replace("attachment", "Attachment").replace("ai", "AI")
+                components_html += f"<tr><td style='padding:4px 12px;border:1px solid #333;'>{label}</td><td style='padding:4px 12px;border:1px solid #333;text-align:center;'>{value}</td></tr>"
+
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        html_body = f"""
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#1a1a2e;color:#e0e0e0;padding:24px;border-radius:12px;">
+            <h2 style="color:#ef4444;margin-top:0;">🚨 SafePhish Phishing Alert</h2>
+            <p style="color:#aaa;font-size:12px;">{timestamp}</p>
+            <hr style="border-color:#333;">
+
+            <h3 style="color:#f59e0b;">📧 Suspicious Email Details</h3>
+            <table style="width:100%;border-collapse:collapse;margin-bottom:16px;">
+                <tr><td style="padding:6px 0;color:#aaa;width:80px;"><b>From:</b></td><td style="color:#fff;">{email_sender}</td></tr>
+                <tr><td style="padding:6px 0;color:#aaa;"><b>Subject:</b></td><td style="color:#fff;">{email_subject}</td></tr>
+                <tr><td style="padding:6px 0;color:#aaa;"><b>Preview:</b></td><td style="color:#ccc;font-style:italic;">{email_snippet[:300]}</td></tr>
+            </table>
+
+            <h3 style="color:#ef4444;">⚠️ Risk Score: {risk_score}%</h3>
+
+            <h4 style="color:#f59e0b;">Findings:</h4>
+            <ul style="padding-left:20px;">{findings_html}</ul>
+
+            {"<h4 style='color:#f59e0b;'>Engine Breakdown:</h4><table style='width:100%;border-collapse:collapse;'>" + components_html + "</table>" if components_html else ""}
+
+            <hr style="border-color:#333;margin-top:20px;">
+            <p style="color:#666;font-size:11px;text-align:center;">This alert was generated automatically by SafePhish Auto-Scan.</p>
+        </div>
+        """
+
+        # Construct the email
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"🚨 [SafePhish Alert] Phishing detected: {email_subject}"
+        msg["From"] = ALERT_FROM_EMAIL
+        msg["To"] = ALERT_TO_EMAIL
+        msg.attach(MIMEText(html_body, "html"))
+
+        # Send via SMTP
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.sendmail(ALERT_FROM_EMAIL, ALERT_TO_EMAIL, msg.as_string())
+
+        print(f"✅ SMTP alert sent to {ALERT_TO_EMAIL} for phishing email from {email_sender}")
+        return jsonify({"success": True})
+
+    except Exception as e:
+        traceback.print_exc()
+        print(f"❌ SMTP alert failed: {e}")
+        return jsonify({"success": False, "reason": str(e)}), 500
+
+
 if __name__ == "__main__":
     print("\n🚀 SafePhish ML Server [NEW ENGINE v2] running at http://localhost:5000", flush=True)
-    print(f"   VT API Key: {'configured ✅' if VT_API_KEY else 'NOT SET ⚠️'}\n", flush=True)
+    print(f"   VT API Key: {'configured ✅' if VT_API_KEY else 'NOT SET ⚠️'}", flush=True)
+    print(f"   SMTP Alerts: {'configured ✅ → ' + ALERT_TO_EMAIL if SMTP_USER and ALERT_TO_EMAIL else 'NOT SET ⚠️ (set SMTP_USER, SMTP_PASS, ALERT_TO_EMAIL in .env)'}", flush=True)
     app.run(host="0.0.0.0", port=5000, debug=False)

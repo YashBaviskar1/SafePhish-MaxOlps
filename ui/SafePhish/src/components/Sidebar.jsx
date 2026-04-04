@@ -43,17 +43,6 @@ const Sidebar = ({ currentPage, setCurrentPage }) => {
         })}
       </nav>
       
-      <div className="p-6 border-t border-[#76767f]/20">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-[#76767f]/20 flex items-center justify-center">
-            <span className="material-symbols-outlined text-[#aab3d8] text-sm">person</span>
-          </div>
-          <div className="flex-1 overflow-hidden">
-            <p className="text-xs font-bold text-[#aab3d8] truncate">Admin Terminal</p>
-            <p className="text-[10px] text-[#76767f]">Node-04 Active</p>
-          </div>
-        </div>
-      </div>
     </aside>
   );
 };

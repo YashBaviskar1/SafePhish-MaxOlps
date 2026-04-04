@@ -9,7 +9,7 @@ const EmailReport = () => {
         if (data.lastEmailAnalysis) {
           const raw = data.lastEmailAnalysis;
           
-          // 1. Safely Parse the URLs (Fixes the .map is not a function bug)
+          // 1. Safely Parse the URLs
           let parsedUrls = [];
           if (Array.isArray(raw.urls)) {
               parsedUrls = raw.urls;
@@ -19,7 +19,12 @@ const EmailReport = () => {
               parsedUrls = [...pUrls, ...lUrls];
           }
 
-          // 2. Map Backend Data to UI State
+          // 2. Separate AI Signals from General Findings
+          const allFindings = raw.findings || [];
+          const aiFindings = allFindings.filter(f => f.includes('[AI Pattern]') || f.includes('[Phishing Signal]'));
+          const generalFindings = allFindings.filter(f => !f.includes('[AI Pattern]') && !f.includes('[Phishing Signal]'));
+
+          // 3. Map Backend Data to UI State
           setEmailData({
             subject: raw.subject || "Analyzed Email",
             sender: raw.sender || "Unknown Sender",
@@ -39,7 +44,8 @@ const EmailReport = () => {
             urls: parsedUrls,
             attachmentScore: raw.components?.attachmentScore || 0,
             aiScore: raw.components?.aiFingerprintScore || 0,
-            findings: raw.findings && raw.findings.length > 0 ? raw.findings : [raw.analysis || "Rule-based fallback scan used. No detailed findings."]
+            aiFindings: aiFindings,
+            findings: generalFindings.length > 0 ? generalFindings : [raw.analysis || "Rule-based fallback scan used. No detailed findings."]
           });
         }
       });
@@ -184,11 +190,7 @@ const EmailReport = () => {
                   tagColor = "bg-[#892401]/20 text-[#892401]";
                   tagLabel = "BEH";
                   f = f.replace('[Behavior] ', '');
-                } else if (f.includes('AI') || f.includes('Fingerprint')) {
-                  icon = "memory";
-                  tagColor = "bg-[#f59e0b]/20 text-[#f59e0b]";
-                  tagLabel = "LLM";
-                }
+                } 
 
                 return (
                   <div key={i} className="flex items-start gap-3 bg-[#76767f]/5 p-3 rounded border border-[#76767f]/10">
@@ -205,7 +207,7 @@ const EmailReport = () => {
           </div>
         </section>
 
-        {/* 🔥 RIGHT: Extracted Payloads */}
+        {/* 🔥 RIGHT: Extracted Payloads & AI */}
         <section className="space-y-4">
           <h3 className="text-lg font-bold text-white flex items-center gap-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
             <span className="text-[#aab3d8]">#</span> Extracted Payloads
@@ -259,7 +261,7 @@ const EmailReport = () => {
               )}
             </div>
 
-            {/* 3. LLM Fingerprinting */}
+            {/* 3. LLM Fingerprinting (Dynamic Findings) */}
             <div className="bg-[#76767f]/10 p-3 border-t border-b border-[#76767f]/20 flex items-center gap-2">
               <span className="material-symbols-outlined text-[#aab3d8] text-sm">memory</span>
               <h4 className="text-xs font-bold text-white uppercase tracking-wider" style={{ fontFamily: 'Plus Jakarta Sans, sans-serif' }}>LLM Fingerprinting</h4>
@@ -272,9 +274,21 @@ const EmailReport = () => {
                       {emailData.aiScore}% AI PROBABILITY
                     </span>
                   </div>
-                  <p className={`text-[11px] ${emailData.aiScore >= 50 ? 'text-[#892401]' : 'text-[#f59e0b]'}`}>
-                    Structural patterns indicate Large Language Model generation (e.g. ChatGPT). Attackers increasingly use AI to draft convincing phishing lures.
-                  </p>
+                  
+                  {/* Dynamic List Rendering here */}
+                  {emailData.aiFindings?.length > 0 ? (
+                    <ul className="space-y-1 mt-1">
+                      {emailData.aiFindings.map((finding, idx) => (
+                        <li key={idx} className={`text-[11px] ${emailData.aiScore >= 50 ? 'text-[#892401]' : 'text-[#f59e0b]'}`}>
+                          • {finding}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                     <p className={`text-[11px] ${emailData.aiScore >= 50 ? 'text-[#892401]' : 'text-[#f59e0b]'}`}>
+                      Structural patterns indicate Large Language Model generation (e.g. ChatGPT).
+                    </p>
+                  )}
                 </div>
               ) : (
                 <div className="text-center text-[#76767f] text-sm py-2">

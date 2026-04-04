@@ -47,9 +47,9 @@ async function extractEmailFromTab(tabId) {
 // ─── Populate email fields from extracted data ───
 function populateEmailFields(emailData) {
     if (!emailData) return;
-    document.getElementById('emailSender').value  = emailData.sender  || '';
+    document.getElementById('emailSender').value = emailData.sender || '';
     document.getElementById('emailSubject').value = emailData.subject || '';
-    document.getElementById('emailBody').value    = emailData.body    || '';
+    document.getElementById('emailBody').value = emailData.body || '';
 }
 
 // ─── Show a status line in the email tab while extracting ───
@@ -87,21 +87,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         // ── B. Have ready-made email content (right-click page scan / double-click) ──
         if (response && response.type === 'email' && response.content) {
             let content = response.content;
-            
+
             // 1. Extract From: line if present
             const fromMatch = content.match(/^From:\s*(.+)$/mi);
             if (fromMatch) {
                 document.getElementById('emailSender').value = fromMatch[1].trim();
                 content = content.replace(/^From:\s*.+$/mi, '').trimStart();
             }
-            
+
             // 2. Extract Subject: line if present
             const subjectMatch = content.match(/^Subject:\s*(.+)$/mi);
             if (subjectMatch) {
                 document.getElementById('emailSubject').value = subjectMatch[1].trim();
                 content = content.replace(/^Subject:\s*.+$/mi, '').trimStart();
             }
-            
+
             // 3. The rest is the body
             document.getElementById('emailBody').value = content.trim();
 
@@ -136,10 +136,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('urlInput').value = url;
 
         const isEmailPlatform =
-            url.includes('mail.google.com')    ||
-            url.includes('outlook.live.com')   ||
+            url.includes('mail.google.com') ||
+            url.includes('outlook.live.com') ||
             url.includes('outlook.office.com') ||
-            url.includes('mail.yahoo.com')     ||
+            url.includes('mail.yahoo.com') ||
             url.includes('mail.proton.me');
 
         if (isEmailPlatform) {
@@ -153,13 +153,20 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             if (emailData && emailData.body && emailData.body.length > 10) {
                 populateEmailFields(emailData);
-                scanEmail();               // ← auto-trigger scan
+                scanEmail().then(() => {
+                    // Automatically trigger attachment scan after email scan is done
+                    autoScanAttachmentsIfPresent();
+                });
             } else {
                 showExtractionStatus('📭 No email open — paste content above and click Scan.');
             }
         } else {
-            // Not an email platform — scan the current page URL
-            scanUrl();
+            // Sequence: 1. Deceptive UI Scan, 2. Main URL Scan
+            // We pass 'true' to triggerDeceptiveScan to skip its internal auto-scan of hidden links,
+            // because we want to trigger the scan for the main page URL specifically.
+            triggerDeceptiveScan(true).then(() => {
+                scanUrl();
+            });
         }
     });
 
@@ -181,7 +188,7 @@ function setDeceptiveBtnsState(disabled, text) {
     });
 }
 
-async function triggerDeceptiveScan() {
+async function triggerDeceptiveScan(skipAutoScanHidden = false) {
     // If a URL scan is running, wait for it to finish first
     if (isUrlScanRunning) {
         setDeceptiveBtnsState(true, '⏳ Waiting…');
@@ -196,7 +203,7 @@ async function triggerDeceptiveScan() {
 
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab) {
-        setDeceptiveBtnsState(false, '🕵️ Scan Page');
+        setDeceptiveBtnsState(false, 'Scan Page');
         return;
     }
 
@@ -218,30 +225,30 @@ async function triggerDeceptiveScan() {
         } catch (err) {
             showDeceptiveResult({
                 error: 'Cannot scan this page. ' +
-                       (tab.url.startsWith('file://') ?
+                    (tab.url.startsWith('file://') ?
                         'For local files, go to chrome://extensions → Details and enable "Allow access to file URLs".' :
                         'The extension could not access this page.')
             });
-            setDeceptiveBtnsState(false, '🕵️ Scan Page');
+            setDeceptiveBtnsState(false, 'Scan Page');
             return;
         }
     }
 
     showDeceptiveResult(result || { count: 0, urls: [] });
-    
-    // Auto-scan the first hidden URL found
-    if (result && result.urls && result.urls.length > 0) {
+
+    // Auto-scan the first hidden URL found — only if not requested to skip
+    if (!skipAutoScanHidden && result && result.urls && result.urls.length > 0) {
         document.getElementById('email-tab').classList.add('hidden');
         document.getElementById('url-tab').classList.remove('hidden');
         document.getElementById('urlInput').value = result.urls[0];
-        
+
         // Minor delay to let the user digest the "deceptive elements found" result before the loader starts
         setTimeout(() => {
             scanUrl();
         }, 1200);
     }
 
-    setDeceptiveBtnsState(false, '🕵️ Scan Page');
+    setDeceptiveBtnsState(false, 'Scan Page');
 }
 
 function showDeceptiveResult(result) {
@@ -272,15 +279,6 @@ function showDeceptiveResult(result) {
     div.classList.remove('hidden');
 }
 
-// ── Scan Page: detect hidden/deceptive clickable elements ──────────────────
-function setDeceptiveBtnsState(disabled, text) {
-    ['scanDeceptiveBtn', 'scanDeceptiveBtnEmail'].forEach(id => {
-        const btn = document.getElementById(id);
-        if (!btn) return;
-        btn.disabled = disabled;
-        btn.textContent = text;
-    });
-}
 
 // URL Scanner
 document.getElementById('scanUrlBtn').addEventListener('click', scanUrl);
@@ -356,9 +354,7 @@ function displayUrlResult(result) {
     const riskLevel = result.isPhishing ? 'PHISHING' : 'LEGITIMATE';
     const riskColor = result.isPhishing ? 'risk-high' : 'risk-safe';
 
-    const mlBadge = result.phishingProb !== null
-        ? `<span style="font-size:11px;background:rgba(255,255,255,0.2);padding:2px 8px;border-radius:12px;margin-left:8px;">🤖 ML Model</span>`
-        : `<span style="font-size:11px;background:rgba(255,255,255,0.15);padding:2px 8px;border-radius:12px;margin-left:8px;">📐 Rule-based</span>`;
+    const mlBadge = '';
 
     const probLine = result.phishingProb !== null
         ? `<div class="detail-item"><strong>Phishing Probability:</strong><p>${result.phishingProb}%</p></div>`
@@ -380,8 +376,19 @@ function displayUrlResult(result) {
                 <p>${result.isPhishing ? '⚠️ Potential Phishing' : '✅ Legitimate'}</p>
             </div>
             <div class="detail-item">
-                <strong>Analysis:</strong>
-                <p>${result.analysis || 'No additional details available'}</p>
+                <strong>Explainability:</strong>
+                <p id="explainabilityText">${(function () {
+            if (result.topFeatures && result.topFeatures.length > 0) {
+                const top4 = result.topFeatures.slice(0, 4);
+                const featureList = top4.map(f => {
+                    const isRisky = f.score < 0; // Negative score = Phishing impact
+                    const icon = isRisky ? '🚨' : '🛡️';
+                    return `${icon} ${f.feature}`;
+                }).join(', ');
+                return `Key Factors: ${featureList}. These indicators most influenced the ${result.isPhishing ? 'PHISHING' : 'LEGITIMATE'} verdict.`;
+            }
+            return result.analysis || 'No additional details available';
+        })()}</p>
             </div>
             <div style="margin-top: 15px; text-align: center;">
                 <button id="viewFeaturesBtn" class="action-btn" style="width: 100%; padding: 10px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; cursor: pointer; border-radius: 8px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s ease;">
@@ -398,15 +405,16 @@ function displayUrlResult(result) {
     if (btn) {
         btn.addEventListener('click', () => {
             // Store results for the detail page
-            chrome.storage.local.set({ 
+            chrome.storage.local.set({
                 lastAnalysis: {
                     url: result.url,
                     isPhishing: result.isPhishing,
                     confidence: result.confidence,
                     features: result.features,
                     mlLabel: result.mlLabel,
-                    phishingProb: result.phishingProb
-                } 
+                    phishingProb: result.phishingProbability,
+                    topFeatures: result.topFeatures || []
+                }
             }, () => {
                 chrome.tabs.create({ url: 'features.html' });
             });
@@ -425,9 +433,7 @@ function displayEmailResult(result) {
     const riskLevel = result.isPhishing ? 'PHISHING' : 'LEGITIMATE';
     const riskColor = result.isPhishing ? 'risk-high' : 'risk-safe';
 
-    const mlBadge = result.phishingProb !== null
-        ? `<span style="font-size:11px;background:rgba(255,255,255,0.2);padding:2px 8px;border-radius:12px;margin-left:8px;">🤖 ML Model</span>`
-        : `<span style="font-size:11px;background:rgba(255,255,255,0.15);padding:2px 8px;border-radius:12px;margin-left:8px;">📐 Rule-based</span>`;
+    const mlBadge = '';
 
     const probLine = result.phishingProb !== null
         ? `<div class="detail-item"><strong>Phishing Probability:</strong><p>${result.phishingProb}%</p></div>`
@@ -437,10 +443,10 @@ function displayEmailResult(result) {
     let urlSection = '';
     if (result.urls) {
         const { phishingUrls, legitimateUrls, summary } = result.urls;
-        
+
         // Create URL verdict list
         let urlVerdictList = '';
-        
+
         // Add phishing URLs first
         if (phishingUrls && phishingUrls.length > 0) {
             phishingUrls.forEach(urlData => {
@@ -456,7 +462,7 @@ function displayEmailResult(result) {
                 `;
             });
         }
-        
+
         // Add legitimate URLs
         if (legitimateUrls && legitimateUrls.length > 0) {
             legitimateUrls.forEach(urlData => {
@@ -487,37 +493,37 @@ function displayEmailResult(result) {
     if (result.components) {
         const c = result.components;
         componentsSection = `
-            <div class="detail-item" style="background: rgba(0,0,0,0.05); padding: 12px; border-radius: 8px; margin-top: 10px;">
-                <strong style="display:block; margin-bottom: 8px; font-size: 14px;">📊 5-Engine Master Breakdown</strong>
+            <div class="detail-item" style="background: rgba(0,0,0,0.05); padding: 8px; border-radius: 8px; margin-top: 8px;">
+                <strong style="display:block; margin-bottom: 6px; font-size: 13px;">📊 5-Engine Master Breakdown</strong>
                 
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
-                    <span style="font-size: 13px;">📧 Email Content (ML Score):</span>
-                    <span style="font-weight:bold; font-size: 13px; color: ${c.mlContentScore >= 50 ? '#ff6b6b' : '#4caf50'};">${c.mlContentScore}/100</span>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 2px;">
+                    <span style="font-size: 12px;">📧 Email Content:</span>
+                    <span style="font-weight:bold; font-size: 12px; color: ${c.mlContentScore >= 50 ? '#ff6b6b' : '#4caf50'};">${c.mlContentScore}/100</span>
                 </div>
                 
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
-                    <span style="font-size: 13px;">🔗 URL Risk (ML Score):</span>
-                    <span style="font-weight:bold; font-size: 13px; color: ${c.urlScore >= 50 ? '#ff6b6b' : '#4caf50'};">${c.urlScore || 0}/100</span>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 2px;">
+                    <span style="font-size: 12px;">🔗 URL Risk:</span>
+                    <span style="font-weight:bold; font-size: 12px; color: ${c.urlScore >= 50 ? '#ff6b6b' : '#4caf50'};">${c.urlScore || 0}/100</span>
                 </div>
                 
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
-                    <span style="font-size: 13px;">🕸️ Behavioral Intent:</span>
-                    <span style="font-weight:bold; font-size: 13px; color: ${c.behaviorScore >= 30 ? '#ff6b6b' : '#4caf50'};">${c.behaviorScore || 0}/100</span>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 2px;">
+                    <span style="font-size: 12px;">🕸️ Behavioral:</span>
+                    <span style="font-weight:bold; font-size: 12px; color: ${c.behaviorScore >= 30 ? '#ff6b6b' : '#4caf50'};">${c.behaviorScore || 0}/100</span>
                 </div>
                 
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
-                    <span style="font-size: 13px;">🕵️ Contextual Anomalies:</span>
-                    <span style="font-weight:bold; font-size: 13px; color: ${c.contextScore >= 30 ? '#ff6b6b' : '#4caf50'};">${c.contextScore || 0}/100</span>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 2px;">
+                    <span style="font-size: 12px;">🕵️ Contextual:</span>
+                    <span style="font-weight:bold; font-size: 12px; color: ${c.contextScore >= 30 ? '#ff6b6b' : '#4caf50'};">${c.contextScore || 0}/100</span>
                 </div>
                 
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
-                    <span style="font-size: 13px;">📎 Attachment Analysis:</span>
-                    <span style="font-weight:bold; font-size: 13px; color: ${c.attachmentScore >= 30 ? '#ff6b6b' : (c.attachmentScore > 0 ? '#ffb347' : '#888')};">${c.attachmentScore > 0 ? c.attachmentScore + '/100' : 'No Attachment'}</span>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 2px;">
+                    <span style="font-size: 12px;">📎 Attachments:</span>
+                    <span style="font-weight:bold; font-size: 12px; color: ${c.attachmentScore >= 30 ? '#ff6b6b' : (c.attachmentScore > 0 ? '#ffb347' : '#888')};">${c.attachmentScore > 0 ? c.attachmentScore + '/100' : 'None'}</span>
                 </div>
                 
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
-                    <span style="font-size: 13px;">🤖 AI Pattern (LLM):</span>
-                    <span style="font-weight:bold; font-size: 13px; color: ${c.aiFingerprintScore >= 50 ? '#ff6b6b' : (c.aiFingerprintScore > 0 ? '#ffb347' : '#888')};">${c.aiFingerprintScore > 0 ? c.aiFingerprintScore + '/100' : 'No Patterns'}</span>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 2px;">
+                    <span style="font-size: 12px;">🤖 AI Pattern (LLM):</span>
+                    <span style="font-weight:bold; font-size: 12px; color: ${c.aiFingerprintScore >= 50 ? '#ff6b6b' : (c.aiFingerprintScore > 0 ? '#ffb347' : '#888')};">${c.aiFingerprintScore > 0 ? c.aiFingerprintScore + '/100' : 'None'}</span>
                 </div>
             </div>
         `;
@@ -527,9 +533,9 @@ function displayEmailResult(result) {
     if (result.findings && result.findings.length > 0) {
         let findingsList = result.findings.map(f => `<li style="margin-bottom: 4px; font-size: 12px; line-height: 1.4;">${escapeHtml(f)}</li>`).join('');
         findingsSection = `
-            <div class="detail-item">
-                <strong style="margin-bottom: 6px; display:block;">🔍 Explainability Findings:</strong>
-                <ul style="padding-left: 20px; margin: 0; color: #ddd;">
+            <div class="detail-item" style="padding-bottom: 8px; margin-bottom: 8px;">
+                <strong style="margin-bottom: 4px; display:block; font-size: 12px;">🔍 Explainability Findings:</strong>
+                <ul style="padding-left: 18px; margin: 0; color: #ddd;">
                     ${findingsList}
                 </ul>
             </div>
@@ -544,9 +550,9 @@ function displayEmailResult(result) {
         <div class="result-details">
             ${componentsSection}
             
-            <div class="detail-item" style="margin-top: 15px;">
+            <div class="detail-item" style="margin-top: 10px; padding-bottom: 8px; margin-bottom: 8px;">
                 <strong>Verdict:</strong>
-                <p style="font-size: 13px;">${result.isPhishing ? '⚠️ Potential Phishing via 5-Engine Analysis' : '✅ Looks Safe across all components'}</p>
+                <p style="font-size: 12px;">${result.isPhishing ? '⚠️ Potential Phishing via 5-Engine Analysis' : '✅ Looks Safe across all components'}</p>
             </div>
             
             ${urlSection}
@@ -905,9 +911,9 @@ function displayAttachmentResult(result) {
     }
 
     const riskColor = result.riskScore >= 60 ? 'risk-high' :
-                      result.riskScore >= 30 ? 'risk-medium' : 'risk-safe';
+        result.riskScore >= 30 ? 'risk-medium' : 'risk-safe';
     const riskEmoji = result.riskScore >= 60 ? '🚨' :
-                      result.riskScore >= 30 ? '⚠️' : '✅';
+        result.riskScore >= 30 ? '⚠️' : '✅';
 
     // Build findings HTML
     const findingsHtml = result.findings && result.findings.length > 0
@@ -1025,3 +1031,31 @@ function displayAttachmentError(message) {
     resultDiv.classList.remove('hidden');
 }
 
+/**
+ * Helper: detect and scan first attachment automatically
+ */
+async function autoScanAttachmentsIfPresent() {
+    try {
+        // We already have detectAttachmentsFromPage running on popup load,
+        // but we need to check if it actually found anything.
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tab) return;
+
+        // Extract again to be sure (or we could store state, but this is simple)
+        const response = await chrome.tabs.sendMessage(tab.id, { action: 'extractAttachmentInfo' });
+        if (response && response.hasAttachments && response.attachments.length > 0) {
+            console.log('SafePhish: Found attachments, auto-scanning...', response.attachments[0].name);
+
+            // 1. Ensure the file tab UI is updated
+            await detectAttachmentsFromPage();
+
+            // 2. Select the first one
+            await autoFetchAttachment(0);
+
+            // 3. Trigger the scan
+            await scanAttachment();
+        }
+    } catch (e) {
+        console.warn('SafePhish: Auto-attachment scan skipped/failed:', e.message);
+    }
+}

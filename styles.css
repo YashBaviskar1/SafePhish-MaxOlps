@@ -13,25 +13,25 @@ body {
 }
 
 .container {
-    width: 480px;
+    width: 440px;
     background: #1a2a4a;
     border-radius: 16px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
     overflow: hidden;
-    padding: 30px;
+    padding: 15px;
 }
 
 /* Header */
 .header {
     color: white;
-    padding: 20px 0;
+    padding: 5px 0;
     text-align: center;
-    margin-bottom: 20px;
+    margin-bottom: 5px;
 }
 
 .header h1 {
-    font-size: 28px;
-    margin-bottom: 5px;
+    font-size: 22px;
+    margin-bottom: 2px;
     font-weight: 600;
     letter-spacing: 0.5px;
 }
@@ -134,7 +134,7 @@ body {
     background: #243d5a;
     color: #fff;
     resize: none;
-    margin-bottom: 15px;
+    margin-bottom: 10px;
     transition: all 0.3s ease;
     font-family: 'Segoe UI', sans-serif;
 }
@@ -197,7 +197,7 @@ body {
 .input-section {
     display: flex;
     flex-direction: column;
-    gap: 15px;
+    gap: 10px;
 }
 
 /* Input Methods - Hidden */
@@ -237,7 +237,7 @@ body {
 
 /* Results */
 .result-section {
-    margin-top: 20px;
+    margin-top: 12px;
 }
 
 .result-section.hidden {
@@ -245,21 +245,21 @@ body {
 }
 
 .result-header {
-    padding: 15px;
+    padding: 6px 10px;
     border-radius: 8px;
-    margin-bottom: 15px;
+    margin-bottom: 8px;
     color: white;
     text-align: center;
 }
 
 .result-header h3 {
-    font-size: 18px;
-    margin-bottom: 5px;
+    font-size: 14px;
+    margin-bottom: 2px;
     color: white;
 }
 
 .result-header p {
-    font-size: 12px;
+    font-size: 11px;
     opacity: 0.9;
 }
 
@@ -342,8 +342,8 @@ body {
 /* Footer link */
 .footer-link {
     text-align: center;
-    margin-top: 20px;
-    padding-top: 15px;
+    margin-top: 15px;
+    padding-top: 10px;
     border-top: 1px solid #3a4a6a;
 }
 
@@ -384,8 +384,8 @@ body {
 
 /* ── Attachment Section ─────────────────────────────────── */
 .attachment-section {
-    margin-top: 18px;
-    padding-top: 15px;
+    margin-top: 10px;
+    padding-top: 8px;
     border-top: 1px solid #3a4a6a;
 }
 
